@@ -11,10 +11,29 @@ from core.logging import configure_logging
 from pipelines.mercadopago_account_statement import import_csv
 
 
+DBT_PROJECT_DIR = Path(__file__).resolve().parents[2] / "dbt"
+
+
+def run_transform() -> bool:
+    from dbt.cli.main import dbtRunner
+
+    result = dbtRunner().invoke(
+        [
+            "build",
+            "--project-dir",
+            str(DBT_PROJECT_DIR),
+            "--profiles-dir",
+            str(DBT_PROJECT_DIR),
+        ]
+    )
+    return result.success
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="home-lab data tools")
     subparsers = parser.add_subparsers(dest="command", required=True)
     subparsers.add_parser("init-db", help="Create the raw PostgreSQL schema")
+    subparsers.add_parser("transform", help="Build and test the dbt analytics models")
 
     import_parser = subparsers.add_parser(
         "import-account-statement", help="Import one Mercado Pago account statement CSV"
@@ -41,6 +60,13 @@ def main() -> int:
             result.source_filename,
             result.batch_id,
         )
+        return 0
+
+    if args.command == "transform":
+        if not run_transform():
+            logging.error("dbt transformation failed")
+            return 1
+        logging.info("Analytics models are ready")
         return 0
 
     return 1

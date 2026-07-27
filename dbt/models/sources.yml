@@ -1,0 +1,15 @@
+version: 2
+
+sources:
+  - name: raw
+    schema: raw
+    tables:
+      - name: mercadopago_account_statements
+        columns:
+          - name: id
+            data_tests:
+              - not_null
+              - unique
+          - name: batch_id
+            data_tests:
+              - not_null

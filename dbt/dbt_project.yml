@@ -1,0 +1,13 @@
+name: home_lab
+version: "1.0.0"
+config-version: 2
+
+profile: home_lab
+
+model-paths: ["models"]
+test-paths: ["tests"]
+clean-targets: ["target", "dbt_packages"]
+
+models:
+  home_lab:
+    +materialized: view
