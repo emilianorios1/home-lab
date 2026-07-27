@@ -59,3 +59,13 @@ Podés correr los tests con:
 ```bash
 .venv/bin/python -m pytest
 ```
+
+## Dashboard local
+
+El dashboard Streamlit muestra flujo, saldo y movimientos del extracto de cuenta. Levantalo junto a PostgreSQL:
+
+```bash
+docker compose up -d --build
+```
+
+Abrí [http://localhost:8501](http://localhost:8501). El servicio queda expuesto únicamente en esta máquina y solo consulta datos; no modifica movimientos ni lotes importados.
