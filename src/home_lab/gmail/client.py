@@ -4,11 +4,45 @@ from __future__ import annotations
 
 import base64
 from collections.abc import Iterator
+from dataclasses import dataclass
+from email.message import Message
+from hashlib import sha256
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs, urlparse
+from urllib.request import Request, urlopen
 
 
 SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
+EPE_INVOICE_HOSTS = {"epe.santafe.gov.ar", "www.epe.santafe.gov.ar"}
+EPE_INVOICE_PATH = (
+    "/comercial/facturacion/facturas/generar_facturacorreo.php"
+)
+
+
+@dataclass(frozen=True)
+class LinkedPdf:
+    attachment_id: str
+    filename: str
+    url: str
+
+
+class _LinkParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.links: list[str] = []
+
+    def handle_starttag(
+        self,
+        tag: str,
+        attrs: list[tuple[str, str | None]],
+    ) -> None:
+        if tag.lower() != "a":
+            return
+        href = dict(attrs).get("href")
+        if href:
+            self.links.append(href)
 
 
 def authorize(client_secret_path: Path, token_path: Path) -> None:
@@ -85,6 +119,82 @@ def pdf_parts(message: dict[str, Any]) -> Iterator[dict[str, Any]]:
         mime_type = part.get("mimeType", "")
         if mime_type == "application/pdf" or filename.lower().endswith(".pdf"):
             yield part
+
+
+def _decode_body(part: dict[str, Any]) -> str:
+    encoded = part.get("body", {}).get("data")
+    if not encoded:
+        return ""
+    content = base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4))
+    header = next(
+        (
+            item.get("value", "")
+            for item in part.get("headers", [])
+            if item.get("name", "").lower() == "content-type"
+        ),
+        "",
+    )
+    message = Message()
+    message["content-type"] = header
+    charset = message.get_content_charset() or "utf-8"
+    try:
+        return content.decode(charset)
+    except (LookupError, UnicodeDecodeError):
+        return content.decode("latin-1")
+
+
+def linked_pdfs(message: dict[str, Any]) -> Iterator[LinkedPdf]:
+    """Find allow-listed EPE invoice links embedded in a Gmail HTML body."""
+    payload = message.get("payload", {})
+    for part in [payload, *iter_parts(payload)]:
+        if part.get("mimeType", "").lower() != "text/html":
+            continue
+        parser = _LinkParser()
+        parser.feed(_decode_body(part))
+        for url in parser.links:
+            parsed = urlparse(url)
+            if (
+                parsed.scheme not in {"http", "https"}
+                or (parsed.hostname or "").lower() not in EPE_INVOICE_HOSTS
+                or parsed.path != EPE_INVOICE_PATH
+            ):
+                continue
+            query = parse_qs(parsed.query)
+            customer = query.get("numerodecliente", ["unknown"])[0]
+            year = query.get("anio", ["unknown"])[0]
+            period = query.get("mes", ["unknown"])[0]
+            digest = sha256(url.encode("utf-8")).hexdigest()
+            yield LinkedPdf(
+                attachment_id=f"linked:{digest}",
+                filename=f"epe-{customer}-{year}-{period}.pdf",
+                url=url,
+            )
+
+
+def download_linked_pdf(url: str, max_bytes: int) -> bytes:
+    """Download an EPE PDF while enforcing the document size and host allow-list."""
+    request = Request(url, headers={"User-Agent": "home-lab/0.1"})
+    with urlopen(request, timeout=30) as response:
+        final = urlparse(response.geturl())
+        if (
+            final.scheme != "https"
+            or (final.hostname or "").lower() not in EPE_INVOICE_HOSTS
+            or final.path != EPE_INVOICE_PATH
+        ):
+            raise ValueError("Linked PDF redirected outside the EPE invoice endpoint")
+        declared_size = int(response.headers.get("Content-Length") or 0)
+        if declared_size > max_bytes:
+            raise ValueError(
+                f"Linked PDF exceeds DOCUMENT_MAX_BYTES: {declared_size} bytes"
+            )
+        content = response.read(max_bytes + 1)
+    if len(content) > max_bytes:
+        raise ValueError(
+            f"Linked PDF exceeds DOCUMENT_MAX_BYTES: {len(content)} bytes"
+        )
+    if not content.startswith(b"%PDF-"):
+        raise ValueError("EPE invoice link did not return a valid PDF")
+    return content
 
 
 def attachment_bytes(service: Any, message_id: str, part: dict[str, Any]) -> bytes:
