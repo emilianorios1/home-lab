@@ -13,7 +13,7 @@ from dashboard.queries import (
     movements,
     overview,
 )
-from pipelines.mercadopago_account_statement import CSV_COLUMNS, import_csv
+from pipelines.mercadopago_account_statement import CSV_COLUMNS, process
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -54,7 +54,7 @@ def test_bled_cesar_adrian_expenses_are_rent(tmp_path: Path) -> None:
         + "\n15-07-2026;Transferencia enviada Bled Cesar Adrian;test-rent;-100,00;-100,00\n"
     )
     try:
-        import_csv(engine, source)
+        process(source)
         data = movements(engine, date(2026, 7, 15), date(2026, 7, 15), "Bled Cesar Adrian")
         test_movement = data[data["reference_id"] == "test-rent"]
         assert len(test_movement) == 1

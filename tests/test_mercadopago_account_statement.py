@@ -4,8 +4,9 @@ import pandas as pd
 import pytest
 from sqlalchemy import text
 
-from core.database import get_engine
-from pipelines.mercadopago_account_statement import CSV_COLUMNS, file_sha256, import_csv, normalize, read_csv
+from core.core import file_sha256
+from core.database import create_schema, get_engine
+from pipelines.mercadopago_account_statement import CSV_COLUMNS, process, read_csv, transform
 
 
 def sample_dataframe() -> pd.DataFrame:
@@ -15,8 +16,8 @@ def sample_dataframe() -> pd.DataFrame:
     )
 
 
-def test_normalize_parses_argentine_amounts() -> None:
-    record = normalize(sample_dataframe())[0]
+def test_transform_parses_argentine_amounts() -> None:
+    record = transform(sample_dataframe()).iloc[0]
     assert str(record["transaction_net_amount"]) == "-15000.00"
     assert str(record["partial_balance"]) == "116778.75"
     assert record["release_date"].isoformat() == "2026-06-01"
@@ -25,7 +26,7 @@ def test_normalize_parses_argentine_amounts() -> None:
 def test_read_csv_rejects_wrong_columns(tmp_path: Path) -> None:
     path = tmp_path / "bad.csv"
     path.write_text("one\ntwo\nthree\nA;B\nvalue;value\n")
-    with pytest.raises(ValueError, match="Unexpected account statement CSV columns"):
+    with pytest.raises(ValueError, match="Unexpected CSV columns"):
         read_csv(path)
 
 
@@ -44,8 +45,9 @@ def test_import_replaces_a_batch_with_the_same_filename(tmp_path: Path) -> None:
     )
     engine = get_engine()
     try:
-        first = import_csv(engine, source)
-        second = import_csv(engine, source)
+        create_schema(engine)
+        first = process(source)
+        second = process(source)
         assert first.batch_id != second.batch_id
         with engine.connect() as connection:
             batch_count = connection.execute(
