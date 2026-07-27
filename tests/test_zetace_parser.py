@@ -2,7 +2,7 @@ from decimal import Decimal
 
 import pytest
 
-from documents.parsers.zetace import ZetaceParseError, parse, supports
+from home_lab.documents.parsers.zetace import ZetaceParseError, parse, supports
 
 
 SAMPLE_TEXT = """

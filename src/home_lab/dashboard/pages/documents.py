@@ -5,10 +5,10 @@ from __future__ import annotations
 import streamlit as st
 import pandas as pd
 
-from core.config import document_store_path
-from core.database import get_engine
-from dashboard.queries import documents
-from documents.storage import resolve_document_path
+from home_lab.config import document_store_path
+from home_lab.dashboard.queries import documents
+from home_lab.database import get_engine
+from home_lab.documents.storage import resolve_document_path
 
 
 def ars(value: object) -> str:

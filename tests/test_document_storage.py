@@ -2,7 +2,11 @@ from datetime import datetime, timezone
 
 import pytest
 
-from documents.storage import resolve_document_path, store_message_metadata, store_pdf
+from home_lab.documents.storage import (
+    resolve_document_path,
+    store_message_metadata,
+    store_pdf,
+)
 
 
 def test_stores_content_addressed_pdf_and_metadata(tmp_path) -> None:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from sqlalchemy import Engine, create_engine, text
 
-from core.config import database_url
+from home_lab.config import database_url
 
 
 def get_engine() -> Engine:

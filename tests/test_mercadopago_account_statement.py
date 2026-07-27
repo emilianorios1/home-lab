@@ -4,9 +4,14 @@ import pandas as pd
 import pytest
 from sqlalchemy import text
 
-from core.core import file_sha256
-from core.database import create_schema, get_engine
-from pipelines.mercadopago_account_statement import CSV_COLUMNS, process, read_csv, transform
+from home_lab.database import create_schema, get_engine
+from home_lab.mercadopago.importer import (
+    CSV_COLUMNS,
+    file_sha256,
+    process,
+    read_csv,
+    transform,
+)
 
 
 def sample_dataframe() -> pd.DataFrame:

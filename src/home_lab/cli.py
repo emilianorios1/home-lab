@@ -6,15 +6,15 @@ import argparse
 import logging
 from pathlib import Path
 
-from core.database import create_schema, get_engine
-from core.logging import configure_logging
-from pipelines.gmail_documents import (
+from home_lab.database import create_schema, get_engine
+from home_lab.gmail.pipeline import (
     authorize_gmail,
     import_local_pdf,
     ingest_gmail,
     parse_pending_documents,
 )
-from pipelines.mercadopago_account_statement import process
+from home_lab.logging import configure_logging
+from home_lab.mercadopago.importer import process
 
 
 DBT_PROJECT_DIR = Path(__file__).resolve().parents[2] / "dbt"
