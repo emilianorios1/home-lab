@@ -1,6 +1,30 @@
 # home-lab
 
-Base local para automatizar la gestión de costos, comenzando por la importación manual de liquidaciones de Mercado Pago.
+Base local para automatizar la gestión de costos, comenzando por la importación manual de extractos de cuenta de Mercado Pago.
+
+## Arquitectura
+
+```text
+data/raw/account_statement.csv
+            │
+            ▼
+ app/cli.py ──► pipelines/mercadopago_account_statement.py
+                         │
+                         ▼
+              PostgreSQL: raw.import_batches
+                          raw.mercadopago_account_statements
+                         │
+                         ▼
+          dashboard/ (Streamlit, solo lectura)
+```
+
+- `app/`: puntos de entrada. Hoy contiene el CLI para crear el esquema e importar un CSV.
+- `core/`: piezas compartidas: configuración, conexión a PostgreSQL y logging.
+- `pipelines/`: lógica específica de cada fuente de datos. El pipeline actual valida y carga `account_statement` en formato raw.
+- `raw`: capa de datos sin reglas de negocio. Conserva movimientos tipados y el lote de archivo que los originó.
+- `dashboard/`: interfaz Streamlit de solo lectura para visualizar flujo, saldos y movimientos.
+
+La próxima capa será `analytics`: reglas de categorización versionadas (por ejemplo, `Netflix → Suscripciones`) y vistas o tablas derivadas para que el dashboard muestre gastos por categoría sin alterar los datos raw.
 
 ## PostgreSQL local
 
