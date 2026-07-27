@@ -35,7 +35,7 @@ cp .env.example .env
 docker compose up -d postgres
 python3 -m venv .venv
 .venv/bin/pip install -e '.[dev]'
-.venv/bin/python -m app.cli init-db
+.venv/bin/home-lab init-db
 ```
 
 Los datos financieros, documentos y secretos están excluidos de Git.
@@ -43,8 +43,8 @@ Los datos financieros, documentos y secretos están excluidos de Git.
 ## Importación de Mercado Pago
 
 ```bash
-.venv/bin/python -m app.cli import-account-statement data/raw/account_statement.csv
-.venv/bin/python -m app.cli transform
+.venv/bin/home-lab import-account-statement data/raw/account_statement.csv
+.venv/bin/home-lab transform
 ```
 
 Las importaciones nuevas se escriben en `bronze`. Al inicializar una instalación
@@ -65,7 +65,7 @@ https://www.googleapis.com/auth/gmail.readonly
 4. Autorizá la cuenta desde una sesión local:
 
    ```bash
-   .venv/bin/python -m app.cli gmail-auth
+   .venv/bin/home-lab gmail-auth
    ```
 
 El token se guarda en `secrets/gmail_token.json` con permisos restringidos. No se
@@ -80,7 +80,7 @@ GMAIL_QUERY=from:no_reply@zetace.com.ar has:attachment filename:pdf
 Para ejecutar el flujo completo:
 
 ```bash
-.venv/bin/python -m app.cli sync-gmail
+.venv/bin/home-lab sync-gmail
 ```
 
 Ese comando descarga adjuntos nuevos, procesa documentos pendientes y ejecuta
@@ -116,8 +116,8 @@ volver a consultar Gmail.
 Para probar o recuperar un PDF local:
 
 ```bash
-.venv/bin/python -m app.cli import-document /ruta/al/documento.pdf
-.venv/bin/python -m app.cli transform
+.venv/bin/home-lab import-document /ruta/al/documento.pdf
+.venv/bin/home-lab transform
 ```
 
 ## Modelos de datos
@@ -151,7 +151,7 @@ ventana razonable alrededor del vencimiento.
 Construí Gold y levantá la aplicación:
 
 ```bash
-.venv/bin/python -m app.cli transform
+.venv/bin/home-lab transform
 docker compose up -d --build dashboard
 ```
 
@@ -169,8 +169,35 @@ El almacenamiento documental se monta como sólo lectura dentro del contenedor.
 
 ```bash
 .venv/bin/python -m pytest
-.venv/bin/python -m app.cli transform
+.venv/bin/home-lab transform
 ```
 
 dbt valida claves, relaciones, estados aceptados y que los conceptos de una expensa
 sumen el importe del primer vencimiento.
+
+## Estructura Python
+
+Todo el código pertenece al namespace `home_lab` y las integraciones están agrupadas
+por fuente o responsabilidad:
+
+```text
+src/home_lab/
+├── cli.py
+├── config.py
+├── database.py
+├── gmail/
+│   ├── client.py
+│   ├── repository.py
+│   └── pipeline.py
+├── mercadopago/
+│   └── importer.py
+├── documents/
+│   ├── pdf.py
+│   ├── storage.py
+│   └── parsers/
+└── dashboard/
+```
+
+Mercado Pago conserva dentro de su propio módulo toda la lectura y carga CSV. Gmail
+separa llamadas externas, persistencia Bronze y orquestación, evitando paquetes
+genéricos como `core` o `integrations`.

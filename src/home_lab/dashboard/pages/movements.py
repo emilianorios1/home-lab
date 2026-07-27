@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import streamlit as st
 
-from core.database import get_engine
-from dashboard.queries import movements
+from home_lab.dashboard.queries import movements
+from home_lab.database import get_engine
 
 
 engine = get_engine()

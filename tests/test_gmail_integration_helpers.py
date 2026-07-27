@@ -1,6 +1,6 @@
 import base64
 
-from integrations.gmail import attachment_bytes, pdf_parts
+from home_lab.gmail.client import attachment_bytes, pdf_parts
 
 
 def test_finds_nested_pdf_parts() -> None:

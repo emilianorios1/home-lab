@@ -5,8 +5,13 @@ from __future__ import annotations
 import plotly.express as px
 import streamlit as st
 
-from core.database import get_engine
-from dashboard.queries import daily_balance, daily_flow, expenses_by_category, overview
+from home_lab.dashboard.queries import (
+    daily_balance,
+    daily_flow,
+    expenses_by_category,
+    overview,
+)
+from home_lab.database import get_engine
 
 
 def ars(value: object) -> str:

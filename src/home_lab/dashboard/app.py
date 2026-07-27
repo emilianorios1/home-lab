@@ -6,8 +6,8 @@ from datetime import date, timedelta
 
 import streamlit as st
 
-from core.database import get_engine
-from dashboard.queries import available_date_range
+from home_lab.dashboard.queries import available_date_range
+from home_lab.database import get_engine
 
 
 st.set_page_config(page_title="home-lab", page_icon="💸", layout="wide")

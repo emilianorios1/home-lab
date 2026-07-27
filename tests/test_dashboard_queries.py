@@ -4,16 +4,16 @@ from pathlib import Path
 import pytest
 from sqlalchemy import text
 
-from app.cli import run_transform
-from core.database import create_schema, get_engine
-from dashboard.queries import (
+from home_lab.cli import run_transform
+from home_lab.dashboard.queries import (
     available_date_range,
     daily_balance,
     expenses_by_category,
     movements,
     overview,
 )
-from pipelines.mercadopago_account_statement import CSV_COLUMNS, process
+from home_lab.database import create_schema, get_engine
+from home_lab.mercadopago.importer import CSV_COLUMNS, process
 
 
 @pytest.fixture(scope="module", autouse=True)
