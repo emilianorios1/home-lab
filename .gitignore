@@ -1,0 +1,9 @@
+# Local configuration
+.env
+
+# Manual data imports; keep the directory itself in the repository.
+data/raw/*
+!data/raw/.gitkeep
+
+# Local editor and operating-system files
+.DS_Store
