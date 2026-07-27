@@ -3,6 +3,7 @@
 .venv/
 __pycache__/
 .pytest_cache/
+*.egg-info/
 
 # Manual data imports; keep the directory itself in the repository.
 data/raw/*
