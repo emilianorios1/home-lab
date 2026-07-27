@@ -14,8 +14,14 @@ def available_date_range(engine: Engine) -> tuple[date, date] | None:
         row = connection.execute(
             text(
                 """
-                SELECT min(release_date) AS start_date, max(release_date) AS end_date
-                FROM analytics.mercadopago_movements
+                WITH dates AS (
+                    SELECT release_date AS value FROM gold.movements
+                    UNION ALL
+                    SELECT coalesce(issue_date, received_at::date) AS value
+                    FROM gold.documents
+                )
+                SELECT min(value) AS start_date, max(value) AS end_date
+                FROM dates
                 """
             )
         ).one()
@@ -30,17 +36,17 @@ def overview(engine: Engine, start_date: date, end_date: date) -> dict[str, Deci
             text(
                 """
                 SELECT
-                    coalesce(sum(transaction_net_amount) FILTER (WHERE transaction_net_amount > 0), 0) AS income,
-                    coalesce(sum(transaction_net_amount) FILTER (WHERE transaction_net_amount < 0), 0) AS expenses,
-                    coalesce(sum(transaction_net_amount), 0) AS net_flow,
+                    coalesce(sum(amount) FILTER (WHERE amount > 0), 0) AS income,
+                    coalesce(sum(amount) FILTER (WHERE amount < 0), 0) AS expenses,
+                    coalesce(sum(amount), 0) AS net_flow,
                     coalesce((
-                        SELECT partial_balance
-                        FROM analytics.mercadopago_movements
+                        SELECT running_balance
+                        FROM gold.movements
                         WHERE release_date BETWEEN :start_date AND :end_date
-                        ORDER BY release_date DESC, id DESC
+                        ORDER BY release_date DESC, source_movement_id DESC
                         LIMIT 1
                     ), 0) AS closing_balance
-                FROM analytics.mercadopago_movements
+                FROM gold.movements
                 WHERE release_date BETWEEN :start_date AND :end_date
                 """
             ),
@@ -55,9 +61,9 @@ def daily_flow(engine: Engine, start_date: date, end_date: date) -> pd.DataFrame
             """
             SELECT
                 release_date,
-                coalesce(sum(transaction_net_amount) FILTER (WHERE transaction_net_amount > 0), 0) AS income,
-                coalesce(sum(transaction_net_amount) FILTER (WHERE transaction_net_amount < 0), 0) AS expenses
-            FROM analytics.mercadopago_movements
+                coalesce(sum(amount) FILTER (WHERE amount > 0), 0) AS income,
+                coalesce(sum(amount) FILTER (WHERE amount < 0), 0) AS expenses
+            FROM gold.movements
             WHERE release_date BETWEEN :start_date AND :end_date
             GROUP BY release_date
             ORDER BY release_date
@@ -72,10 +78,10 @@ def daily_balance(engine: Engine, start_date: date, end_date: date) -> pd.DataFr
     return pd.read_sql(
         text(
             """
-            SELECT DISTINCT ON (release_date) release_date, partial_balance
-            FROM analytics.mercadopago_movements
+            SELECT DISTINCT ON (release_date) release_date, running_balance AS partial_balance
+            FROM gold.movements
             WHERE release_date BETWEEN :start_date AND :end_date
-            ORDER BY release_date, id DESC
+            ORDER BY release_date, source_movement_id DESC
             """
         ),
         engine,
@@ -87,10 +93,10 @@ def expenses_by_category(engine: Engine, start_date: date, end_date: date) -> pd
     return pd.read_sql(
         text(
             """
-            SELECT category, sum(transaction_net_amount) AS amount
-            FROM analytics.mercadopago_movements
+            SELECT category, sum(amount) AS amount
+            FROM gold.movements
             WHERE release_date BETWEEN :start_date AND :end_date
-              AND transaction_net_amount < 0
+              AND amount < 0
             GROUP BY category
             ORDER BY amount
             """
@@ -112,15 +118,65 @@ def movements(
             """
             SELECT
                 release_date,
-                transaction_type,
+                description AS transaction_type,
                 reference_id,
                 category,
-                transaction_net_amount,
-                partial_balance
-            FROM analytics.mercadopago_movements
+                amount AS transaction_net_amount,
+                running_balance AS partial_balance,
+                source
+            FROM gold.movements
             WHERE release_date BETWEEN :start_date AND :end_date
-              AND (:search = '' OR transaction_type ILIKE :search_pattern)
-            ORDER BY release_date DESC, id DESC
+              AND (:search = '' OR description ILIKE :search_pattern)
+            ORDER BY release_date DESC, source_movement_id DESC
+            LIMIT :limit
+            """
+        ),
+        engine,
+        params={
+            "start_date": start_date,
+            "end_date": end_date,
+            "search": search.strip(),
+            "search_pattern": f"%{search.strip()}%",
+            "limit": limit,
+        },
+    )
+
+
+def documents(
+    engine: Engine,
+    start_date: date,
+    end_date: date,
+    search: str = "",
+    limit: int = 200,
+) -> pd.DataFrame:
+    return pd.read_sql(
+        text(
+            """
+            SELECT
+                document_id,
+                coalesce(issue_date, received_at::date) AS document_date,
+                period,
+                issuer,
+                unit,
+                first_due_date,
+                first_due_amount,
+                second_due_date,
+                second_due_amount,
+                parse_status,
+                original_filename,
+                storage_path,
+                byte_size,
+                error_message
+            FROM gold.documents
+            WHERE coalesce(issue_date, received_at::date)
+                  BETWEEN :start_date AND :end_date
+              AND (
+                  :search = ''
+                  OR coalesce(issuer, '') ILIKE :search_pattern
+                  OR coalesce(original_filename, '') ILIKE :search_pattern
+                  OR coalesce(unit, '') ILIKE :search_pattern
+              )
+            ORDER BY coalesce(issue_date, received_at::date) DESC, document_id DESC
             LIMIT :limit
             """
         ),

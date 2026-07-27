@@ -43,7 +43,7 @@ def run_csv_pipeline(
     transform: Transform,
     read_options: Mapping[str, Any] | None = None,
     column_types: Mapping[str, Any] | None = None,
-    schema: str = "raw",
+    schema: str = "bronze",
 ) -> ImportResult:
     """Read, transform and atomically load one CSV file."""
     dataframe = read_csv(
@@ -61,13 +61,13 @@ def run_csv_pipeline(
 
     with engine.begin() as connection:
         connection.execute(
-            text("DELETE FROM raw.import_batches WHERE source_filename = :source_filename"),
+            text("DELETE FROM bronze.import_batches WHERE source_filename = :source_filename"),
             {"source_filename": source_filename},
         )
         connection.execute(
             text(
                 """
-                INSERT INTO raw.import_batches (id, source_filename, source_sha256, row_count)
+                INSERT INTO bronze.import_batches (id, source_filename, source_sha256, row_count)
                 VALUES (:id, :source_filename, :source_sha256, :row_count)
                 """
             ),

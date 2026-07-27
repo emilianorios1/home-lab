@@ -11,6 +11,11 @@ dbt/target/
 # Manual data imports; keep the directory itself in the repository.
 data/raw/*
 !data/raw/.gitkeep
+data/bronze/*
+!data/bronze/.gitkeep
+data/*.lock
+data/*.log
+secrets/
 
 # Local editor and operating-system files
 .DS_Store

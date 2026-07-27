@@ -5,7 +5,7 @@ import pytest
 from sqlalchemy import text
 
 from app.cli import run_transform
-from core.database import get_engine
+from core.database import create_schema, get_engine
 from dashboard.queries import (
     available_date_range,
     daily_balance,
@@ -18,6 +18,7 @@ from pipelines.mercadopago_account_statement import CSV_COLUMNS, process
 
 @pytest.fixture(scope="module", autouse=True)
 def build_analytics_models() -> None:
+    create_schema(get_engine())
     assert run_transform()
 
 
@@ -62,6 +63,6 @@ def test_bled_cesar_adrian_expenses_are_rent(tmp_path: Path) -> None:
     finally:
         with engine.begin() as connection:
             connection.execute(
-                text("DELETE FROM raw.import_batches WHERE source_filename = :filename"),
+                text("DELETE FROM bronze.import_batches WHERE source_filename = :filename"),
                 {"filename": source.name},
             )

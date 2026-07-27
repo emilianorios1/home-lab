@@ -51,14 +51,14 @@ def test_import_replaces_a_batch_with_the_same_filename(tmp_path: Path) -> None:
         assert first.batch_id != second.batch_id
         with engine.connect() as connection:
             batch_count = connection.execute(
-                text("SELECT count(*) FROM raw.import_batches WHERE source_filename = :filename"),
+                text("SELECT count(*) FROM bronze.import_batches WHERE source_filename = :filename"),
                 {"filename": source.name},
             ).scalar_one()
             row_count = connection.execute(
                 text(
                     """
-                    SELECT count(*) FROM raw.mercadopago_account_statements statements
-                    JOIN raw.import_batches batches ON batches.id = statements.batch_id
+                    SELECT count(*) FROM bronze.mercadopago_account_statements statements
+                    JOIN bronze.import_batches batches ON batches.id = statements.batch_id
                     WHERE batches.source_filename = :filename
                     """
                 ),
@@ -69,6 +69,6 @@ def test_import_replaces_a_batch_with_the_same_filename(tmp_path: Path) -> None:
     finally:
         with engine.begin() as connection:
             connection.execute(
-                text("DELETE FROM raw.import_batches WHERE source_filename = :filename"),
+                text("DELETE FROM bronze.import_batches WHERE source_filename = :filename"),
                 {"filename": source.name},
             )

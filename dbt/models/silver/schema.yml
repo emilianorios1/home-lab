@@ -1,0 +1,62 @@
+version: 2
+
+models:
+  - name: silver_movements
+    description: Movimientos financieros normalizados entre fuentes.
+    columns:
+      - name: source_movement_id
+        data_tests: [not_null, unique]
+      - name: category
+        data_tests:
+          - not_null:
+              config:
+                where: "amount < 0"
+  - name: silver_documents
+    description: Registro canónico de adjuntos y su último resultado de parsing.
+    columns:
+      - name: document_id
+        data_tests: [not_null, unique]
+      - name: sha256
+        data_tests: [not_null]
+      - name: parse_status
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [pending, parsed, unsupported, failed]
+  - name: silver_invoices
+    description: Facturas y expensas extraídas de documentos.
+    columns:
+      - name: invoice_id
+        data_tests: [not_null, unique]
+      - name: document_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('silver_documents')
+                field: document_id
+      - name: period
+        data_tests: [not_null]
+      - name: first_due_amount
+        data_tests: [not_null]
+  - name: silver_invoice_due_dates
+    columns:
+      - name: invoice_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('silver_invoices')
+                field: invoice_id
+      - name: due_number
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [1, 2]
+  - name: silver_invoice_line_items
+    columns:
+      - name: invoice_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('silver_invoices')
+                field: invoice_id
