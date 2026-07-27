@@ -9,6 +9,9 @@ data/raw/account_statement.csv
             │
             ▼
  app/cli.py ──► pipelines/mercadopago_account_statement.py
+                         │ transform(DataFrame)
+                         ▼
+                  core/core.py + core/etl.py
                          │
                          ▼
               PostgreSQL: raw.import_batches
@@ -22,8 +25,10 @@ data/raw/account_statement.csv
 ```
 
 - `app/`: puntos de entrada. Hoy contiene el CLI para crear el esquema e importar un CSV.
-- `core/`: piezas compartidas: configuración, conexión a PostgreSQL y logging.
-- `pipelines/`: lógica específica de cada fuente de datos. El pipeline actual valida y carga `account_statement` en formato raw.
+- `core/core.py`: runner genérico que coordina la lectura, transformación, auditoría y carga atómica de un CSV.
+- `core/etl.py`: helpers pequeños de pandas para validar CSV y cargar DataFrames.
+- `core/database.py`: conexión a PostgreSQL e inicialización de las tablas raw.
+- `pipelines/`: configuración y transformación específica de cada fuente. No contiene conexiones ni SQL de carga.
 - `raw`: capa de datos sin reglas de negocio. Conserva movimientos tipados y el lote de archivo que los originó.
 - `dbt/`: modelos y pruebas de la capa `analytics`, incluidas las reglas de categorización.
 - `dashboard/`: interfaz Streamlit de solo lectura para visualizar flujo, saldos y movimientos.
@@ -96,6 +101,20 @@ Podés correr los tests con:
 ```bash
 .venv/bin/python -m pytest
 ```
+
+### Agregar otra pipeline CSV
+
+Una pipeline nueva sólo necesita declarar:
+
+- las columnas esperadas y opciones de `pandas.read_csv`;
+- los tipos de las columnas de destino;
+- una función `transform(dataframe)`;
+- una función `process(path)` que llame a `run_csv_pipeline`.
+
+La lectura, conexión, creación del lote, transacción y carga con `DataFrame.to_sql`
+quedan centralizadas en `core`. Si más adelante una fuente necesita API, archivos
+grandes o una estrategia de carga diferente, se puede agregar esa capacidad sin
+complicar las pipelines CSV existentes.
 
 ## Dashboard local
 

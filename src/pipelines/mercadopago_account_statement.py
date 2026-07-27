@@ -1,18 +1,15 @@
-"""Raw Mercado Pago account statement CSV import."""
+"""Mercado Pago account statement CSV pipeline."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import date, datetime
-from decimal import Decimal, InvalidOperation
-from hashlib import sha256
+from decimal import Decimal
 from pathlib import Path
-from uuid import UUID, uuid4
 
 import pandas as pd
-from sqlalchemy import Engine, text
+from sqlalchemy import Date, Numeric, Text
 
-from core.database import create_schema
+from core.core import ImportResult, run_csv_pipeline
+from core.etl import read_csv as read_csv_file
 
 
 CSV_COLUMNS = [
@@ -23,117 +20,68 @@ CSV_COLUMNS = [
     "PARTIAL_BALANCE",
 ]
 
+READ_OPTIONS = {
+    "sep": ";",
+    "skiprows": 3,
+    "dtype": str,
+    "keep_default_na": False,
+}
 
-@dataclass(frozen=True)
-class ImportResult:
-    batch_id: UUID
-    source_filename: str
-    row_count: int
+COLUMN_NAMES = {
+    "RELEASE_DATE": "release_date",
+    "TRANSACTION_TYPE": "transaction_type",
+    "REFERENCE_ID": "reference_id",
+    "TRANSACTION_NET_AMOUNT": "transaction_net_amount",
+    "PARTIAL_BALANCE": "partial_balance",
+}
+
+COLUMN_TYPES = {
+    "release_date": Date(),
+    "transaction_type": Text(),
+    "reference_id": Text(),
+    "transaction_net_amount": Numeric(18, 2),
+    "partial_balance": Numeric(18, 2),
+}
 
 
 def read_csv(path: Path) -> pd.DataFrame:
-    if not path.is_file():
-        raise FileNotFoundError(path)
-    dataframe = pd.read_csv(path, sep=";", skiprows=3, dtype=str, keep_default_na=False)
-    if list(dataframe.columns) != CSV_COLUMNS:
-        raise ValueError(
-            "Unexpected account statement CSV columns. "
-            f"Expected {CSV_COLUMNS}, got {list(dataframe.columns)}"
-        )
+    return read_csv_file(path, expected_columns=CSV_COLUMNS, options=READ_OPTIONS)
+
+
+def _argentine_decimal(series: pd.Series) -> pd.Series:
+    normalized = (
+        series.str.strip()
+        .str.replace(".", "", regex=False)
+        .str.replace(",", ".", regex=False)
+    )
+    return normalized.map(lambda value: Decimal(value) if value else None)
+
+
+def transform(dataframe: pd.DataFrame) -> pd.DataFrame:
+    dataframe = dataframe.rename(columns=COLUMN_NAMES)
+
+    release_dates = dataframe["release_date"].str.strip().replace("", pd.NA)
+    dataframe["release_date"] = pd.to_datetime(
+        release_dates,
+        format="%d-%m-%Y",
+        errors="raise",
+    ).dt.date
+
+    for column in ("transaction_type", "reference_id"):
+        dataframe[column] = dataframe[column].str.strip().replace("", None)
+
+    for column in ("transaction_net_amount", "partial_balance"):
+        dataframe[column] = _argentine_decimal(dataframe[column])
+
     return dataframe
 
 
-def _optional_text(value: str) -> str | None:
-    value = value.strip()
-    return value or None
-
-
-def _decimal(value: str, column: str, row_number: int) -> Decimal | None:
-    value = value.strip()
-    if not value:
-        return None
-    try:
-        return Decimal(value.replace(".", "").replace(",", "."))
-    except InvalidOperation as error:
-        raise ValueError(f"Invalid {column} at CSV row {row_number}: {value!r}") from error
-
-
-def _date(value: str, row_number: int) -> date | None:
-    value = value.strip()
-    if not value:
-        return None
-    try:
-        return datetime.strptime(value, "%d-%m-%Y").date()
-    except ValueError as error:
-        raise ValueError(f"Invalid RELEASE_DATE at CSV row {row_number}: {value!r}") from error
-
-
-def normalize(dataframe: pd.DataFrame) -> list[dict[str, object | None]]:
-    records: list[dict[str, object | None]] = []
-    for row_number, row in enumerate(dataframe.to_dict(orient="records"), start=5):
-        records.append(
-            {
-                "release_date": _date(row["RELEASE_DATE"], row_number),
-                "transaction_type": _optional_text(row["TRANSACTION_TYPE"]),
-                "reference_id": _optional_text(row["REFERENCE_ID"]),
-                "transaction_net_amount": _decimal(
-                    row["TRANSACTION_NET_AMOUNT"], "TRANSACTION_NET_AMOUNT", row_number
-                ),
-                "partial_balance": _decimal(row["PARTIAL_BALANCE"], "PARTIAL_BALANCE", row_number),
-            }
-        )
-    return records
-
-
-def file_sha256(path: Path) -> str:
-    digest = sha256()
-    with path.open("rb") as source:
-        for chunk in iter(lambda: source.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def import_csv(engine: Engine, path: Path) -> ImportResult:
-    dataframe = read_csv(path)
-    records = normalize(dataframe)
-    source_filename = path.name
-    batch_id = uuid4()
-
-    create_schema(engine)
-    with engine.begin() as connection:
-        connection.execute(
-            text("DELETE FROM raw.import_batches WHERE source_filename = :source_filename"),
-            {"source_filename": source_filename},
-        )
-        connection.execute(
-            text(
-                """
-                INSERT INTO raw.import_batches (id, source_filename, source_sha256, row_count)
-                VALUES (:id, :source_filename, :source_sha256, :row_count)
-                """
-            ),
-            {
-                "id": batch_id,
-                "source_filename": source_filename,
-                "source_sha256": file_sha256(path),
-                "row_count": len(records),
-            },
-        )
-        if records:
-            for record in records:
-                record["batch_id"] = batch_id
-            connection.execute(
-                text(
-                    """
-                    INSERT INTO raw.mercadopago_account_statements (
-                        batch_id, release_date, transaction_type, reference_id,
-                        transaction_net_amount, partial_balance
-                    ) VALUES (
-                        :batch_id, :release_date, :transaction_type, :reference_id,
-                        :transaction_net_amount, :partial_balance
-                    )
-                    """
-                ),
-                records,
-            )
-    return ImportResult(batch_id=batch_id, source_filename=source_filename, row_count=len(records))
+def process(path: Path) -> ImportResult:
+    return run_csv_pipeline(
+        path,
+        table="mercadopago_account_statements",
+        expected_columns=CSV_COLUMNS,
+        read_options=READ_OPTIONS,
+        transform=transform,
+        column_types=COLUMN_TYPES,
+    )
