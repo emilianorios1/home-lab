@@ -24,24 +24,17 @@ def create_schema(engine: Engine) -> None:
         )
         """,
         """
-        CREATE TABLE IF NOT EXISTS raw.mercadopago_settlements (
+        CREATE TABLE IF NOT EXISTS raw.mercadopago_account_statements (
             id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
             batch_id UUID NOT NULL REFERENCES raw.import_batches(id) ON DELETE CASCADE,
-            source_id TEXT,
-            payment_method_type TEXT,
+            release_date DATE,
             transaction_type TEXT,
-            transaction_amount NUMERIC(18, 2),
-            transaction_date TIMESTAMPTZ,
-            fee_amount NUMERIC(18, 2),
-            settlement_date TIMESTAMPTZ,
-            real_amount NUMERIC(18, 2),
-            taxes_amount NUMERIC(18, 2),
-            business_unit TEXT,
-            sub_unit TEXT,
-            money_release_date TIMESTAMPTZ
+            reference_id TEXT,
+            transaction_net_amount NUMERIC(18, 2),
+            partial_balance NUMERIC(18, 2)
         )
         """,
-        "CREATE INDEX IF NOT EXISTS mercadopago_settlements_batch_id_idx ON raw.mercadopago_settlements(batch_id)",
+        "CREATE INDEX IF NOT EXISTS mercadopago_account_statements_batch_id_idx ON raw.mercadopago_account_statements(batch_id)",
     ]
     with engine.begin() as connection:
         for statement in statements:

@@ -46,10 +46,10 @@ El importador es un CLI de Python. Crea el esquema `raw` y carga el CSV sin apli
    .venv/bin/python -m app.cli init-db
    ```
 
-3. Importá un CSV explícitamente:
+3. Importá un extracto de cuenta explícitamente:
 
    ```bash
-   .venv/bin/python -m app.cli import-mercadopago data/raw/reporte.csv
+   .venv/bin/python -m app.cli import-account-statement data/raw/account_statement.csv
    ```
 
 Al importar otra vez el mismo nombre de archivo, el lote anterior se reemplaza de forma atómica. Los archivos con otro nombre se guardan como lotes independientes.

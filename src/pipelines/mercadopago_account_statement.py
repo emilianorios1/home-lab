@@ -1,9 +1,9 @@
-"""Raw Mercado Pago settlement CSV import."""
+"""Raw Mercado Pago account statement CSV import."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from hashlib import sha256
 from pathlib import Path
@@ -16,22 +16,12 @@ from core.database import create_schema
 
 
 CSV_COLUMNS = [
-    "SOURCE_ID",
-    "PAYMENT_METHOD_TYPE",
+    "RELEASE_DATE",
     "TRANSACTION_TYPE",
-    "TRANSACTION_AMOUNT",
-    "TRANSACTION_DATE",
-    "FEE_AMOUNT",
-    "SETTLEMENT_DATE",
-    "REAL_AMOUNT",
-    "TAXES_AMOUNT",
-    "BUSINESS_UNIT",
-    "SUB_UNIT",
-    "MONEY_RELEASE_DATE",
+    "REFERENCE_ID",
+    "TRANSACTION_NET_AMOUNT",
+    "PARTIAL_BALANCE",
 ]
-DECIMAL_COLUMNS = {"TRANSACTION_AMOUNT", "FEE_AMOUNT", "REAL_AMOUNT", "TAXES_AMOUNT"}
-DATETIME_COLUMNS = {"TRANSACTION_DATE", "SETTLEMENT_DATE", "MONEY_RELEASE_DATE"}
-DATABASE_COLUMNS = [column.lower() for column in CSV_COLUMNS]
 
 
 @dataclass(frozen=True)
@@ -44,10 +34,10 @@ class ImportResult:
 def read_csv(path: Path) -> pd.DataFrame:
     if not path.is_file():
         raise FileNotFoundError(path)
-    dataframe = pd.read_csv(path, dtype=str, keep_default_na=False)
+    dataframe = pd.read_csv(path, sep=";", skiprows=3, dtype=str, keep_default_na=False)
     if list(dataframe.columns) != CSV_COLUMNS:
         raise ValueError(
-            "Unexpected Mercado Pago CSV columns. "
+            "Unexpected account statement CSV columns. "
             f"Expected {CSV_COLUMNS}, got {list(dataframe.columns)}"
         )
     return dataframe
@@ -63,34 +53,35 @@ def _decimal(value: str, column: str, row_number: int) -> Decimal | None:
     if not value:
         return None
     try:
-        return Decimal(value)
+        return Decimal(value.replace(".", "").replace(",", "."))
     except InvalidOperation as error:
         raise ValueError(f"Invalid {column} at CSV row {row_number}: {value!r}") from error
 
 
-def _datetime(value: str, column: str, row_number: int) -> datetime | None:
+def _date(value: str, row_number: int) -> date | None:
     value = value.strip()
     if not value:
         return None
-    parsed = pd.to_datetime(value, utc=True, errors="coerce")
-    if pd.isna(parsed):
-        raise ValueError(f"Invalid {column} at CSV row {row_number}: {value!r}")
-    return parsed.to_pydatetime()
+    try:
+        return datetime.strptime(value, "%d-%m-%Y").date()
+    except ValueError as error:
+        raise ValueError(f"Invalid RELEASE_DATE at CSV row {row_number}: {value!r}") from error
 
 
 def normalize(dataframe: pd.DataFrame) -> list[dict[str, object | None]]:
     records: list[dict[str, object | None]] = []
-    for row_number, row in enumerate(dataframe.to_dict(orient="records"), start=2):
-        record: dict[str, object | None] = {}
-        for column in CSV_COLUMNS:
-            value = row[column]
-            if column in DECIMAL_COLUMNS:
-                record[column.lower()] = _decimal(value, column, row_number)
-            elif column in DATETIME_COLUMNS:
-                record[column.lower()] = _datetime(value, column, row_number)
-            else:
-                record[column.lower()] = _optional_text(value)
-        records.append(record)
+    for row_number, row in enumerate(dataframe.to_dict(orient="records"), start=5):
+        records.append(
+            {
+                "release_date": _date(row["RELEASE_DATE"], row_number),
+                "transaction_type": _optional_text(row["TRANSACTION_TYPE"]),
+                "reference_id": _optional_text(row["REFERENCE_ID"]),
+                "transaction_net_amount": _decimal(
+                    row["TRANSACTION_NET_AMOUNT"], "TRANSACTION_NET_AMOUNT", row_number
+                ),
+                "partial_balance": _decimal(row["PARTIAL_BALANCE"], "PARTIAL_BALANCE", row_number),
+            }
+        )
     return records
 
 
@@ -134,14 +125,12 @@ def import_csv(engine: Engine, path: Path) -> ImportResult:
             connection.execute(
                 text(
                     """
-                    INSERT INTO raw.mercadopago_settlements (
-                        batch_id, source_id, payment_method_type, transaction_type,
-                        transaction_amount, transaction_date, fee_amount, settlement_date,
-                        real_amount, taxes_amount, business_unit, sub_unit, money_release_date
+                    INSERT INTO raw.mercadopago_account_statements (
+                        batch_id, release_date, transaction_type, reference_id,
+                        transaction_net_amount, partial_balance
                     ) VALUES (
-                        :batch_id, :source_id, :payment_method_type, :transaction_type,
-                        :transaction_amount, :transaction_date, :fee_amount, :settlement_date,
-                        :real_amount, :taxes_amount, :business_unit, :sub_unit, :money_release_date
+                        :batch_id, :release_date, :transaction_type, :reference_id,
+                        :transaction_net_amount, :partial_balance
                     )
                     """
                 ),

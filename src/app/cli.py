@@ -8,7 +8,7 @@ from pathlib import Path
 
 from core.database import create_schema, get_engine
 from core.logging import configure_logging
-from pipelines.mercadopago_settlements import import_csv
+from pipelines.mercadopago_account_statement import import_csv
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -17,7 +17,7 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("init-db", help="Create the raw PostgreSQL schema")
 
     import_parser = subparsers.add_parser(
-        "import-mercadopago", help="Import one Mercado Pago settlement CSV"
+        "import-account-statement", help="Import one Mercado Pago account statement CSV"
     )
     import_parser.add_argument("csv_path", type=Path, help="Path to the CSV file")
     return parser
@@ -33,7 +33,7 @@ def main() -> int:
         logging.info("Raw schema is ready")
         return 0
 
-    if args.command == "import-mercadopago":
+    if args.command == "import-account-statement":
         result = import_csv(engine, args.csv_path)
         logging.info(
             "Imported %s rows from %s into batch %s",
