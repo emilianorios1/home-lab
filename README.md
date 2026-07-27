@@ -15,6 +15,9 @@ data/raw/account_statement.csv
                           raw.mercadopago_account_statements
                          │
                          ▼
+                    dbt: analytics
+                         │
+                         ▼
           dashboard/ (Streamlit, solo lectura)
 ```
 
@@ -22,9 +25,13 @@ data/raw/account_statement.csv
 - `core/`: piezas compartidas: configuración, conexión a PostgreSQL y logging.
 - `pipelines/`: lógica específica de cada fuente de datos. El pipeline actual valida y carga `account_statement` en formato raw.
 - `raw`: capa de datos sin reglas de negocio. Conserva movimientos tipados y el lote de archivo que los originó.
+- `dbt/`: modelos y pruebas de la capa `analytics`, incluidas las reglas de categorización.
 - `dashboard/`: interfaz Streamlit de solo lectura para visualizar flujo, saldos y movimientos.
 
-La próxima capa será `analytics`: reglas de categorización versionadas (por ejemplo, `Netflix → Suscripciones`) y vistas o tablas derivadas para que el dashboard muestre gastos por categoría sin alterar los datos raw.
+La capa `analytics` contiene reglas de categorización versionadas y vistas derivadas para
+que el dashboard muestre gastos por categoría sin alterar los datos raw. Actualmente,
+los egresos destinados a `Bled Cesar Adrian` se categorizan como `Alquiler`; los demás
+quedan como `Sin categorizar`.
 
 ## PostgreSQL local
 
@@ -74,6 +81,12 @@ El importador es un CLI de Python. Crea el esquema `raw` y carga el CSV sin apli
 
    ```bash
    .venv/bin/python -m app.cli import-account-statement data/raw/account_statement.csv
+   ```
+
+4. Construí y validá la capa analítica:
+
+   ```bash
+   .venv/bin/python -m app.cli transform
    ```
 
 Al importar otra vez el mismo nombre de archivo, el lote anterior se reemplaza de forma atómica. Los archivos con otro nombre se guardan como lotes independientes.

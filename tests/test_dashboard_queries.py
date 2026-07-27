@@ -1,7 +1,24 @@
 from datetime import date
+from pathlib import Path
 
+import pytest
+from sqlalchemy import text
+
+from app.cli import run_transform
 from core.database import get_engine
-from dashboard.queries import available_date_range, daily_balance, movements, overview, top_expenses
+from dashboard.queries import (
+    available_date_range,
+    daily_balance,
+    expenses_by_category,
+    movements,
+    overview,
+)
+from pipelines.mercadopago_account_statement import CSV_COLUMNS, import_csv
+
+
+@pytest.fixture(scope="module", autouse=True)
+def build_analytics_models() -> None:
+    assert run_transform()
 
 
 def test_dashboard_queries_read_imported_account_statement() -> None:
@@ -14,8 +31,10 @@ def test_dashboard_queries_read_imported_account_statement() -> None:
     assert summary["income"] > 0
     assert summary["expenses"] < 0
     assert not daily_balance(engine, start_date, end_date).empty
-    assert not top_expenses(engine, start_date, end_date).empty
-    assert not movements(engine, start_date, end_date).empty
+    assert not expenses_by_category(engine, start_date, end_date).empty
+    movement_data = movements(engine, start_date, end_date)
+    assert not movement_data.empty
+    assert "category" in movement_data.columns
 
 
 def test_movements_filters_by_transaction_type() -> None:
@@ -23,3 +42,26 @@ def test_movements_filters_by_transaction_type() -> None:
     data = movements(engine, date(2026, 6, 1), date(2026, 6, 30), "Netflix")
     assert not data.empty
     assert data["transaction_type"].str.contains("Netflix", case=False).all()
+
+
+def test_bled_cesar_adrian_expenses_are_rent(tmp_path: Path) -> None:
+    engine = get_engine()
+    source = tmp_path / "bled-category-test.csv"
+    source.write_text(
+        "INITIAL_BALANCE;CREDITS;DEBITS;FINAL_BALANCE\n"
+        "0,00;0,00;-100,00;-100,00\n\n"
+        + ";".join(CSV_COLUMNS)
+        + "\n15-07-2026;Transferencia enviada Bled Cesar Adrian;test-rent;-100,00;-100,00\n"
+    )
+    try:
+        import_csv(engine, source)
+        data = movements(engine, date(2026, 7, 15), date(2026, 7, 15), "Bled Cesar Adrian")
+        test_movement = data[data["reference_id"] == "test-rent"]
+        assert len(test_movement) == 1
+        assert test_movement.iloc[0]["category"] == "Alquiler"
+    finally:
+        with engine.begin() as connection:
+            connection.execute(
+                text("DELETE FROM raw.import_batches WHERE source_filename = :filename"),
+                {"filename": source.name},
+            )

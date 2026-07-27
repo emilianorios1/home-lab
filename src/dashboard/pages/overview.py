@@ -6,7 +6,7 @@ import plotly.express as px
 import streamlit as st
 
 from core.database import get_engine
-from dashboard.queries import daily_balance, daily_flow, overview, top_expenses
+from dashboard.queries import daily_balance, daily_flow, expenses_by_category, overview
 
 
 def ars(value: object) -> str:
@@ -29,7 +29,7 @@ balance.metric("Saldo final", ars(summary["closing_balance"]))
 
 balance_data = daily_balance(engine, start_date, end_date)
 flow_data = daily_flow(engine, start_date, end_date)
-expense_data = top_expenses(engine, start_date, end_date)
+expense_data = expenses_by_category(engine, start_date, end_date)
 
 left, right = st.columns(2)
 with left:
@@ -45,8 +45,8 @@ with right:
         use_container_width=True,
     )
 
-st.subheader("Principales egresos por tipo")
+st.subheader("Egresos por categoría")
 st.plotly_chart(
-    px.bar(expense_data.sort_values("amount"), x="amount", y="transaction_type", orientation="h"),
+    px.bar(expense_data.sort_values("amount"), x="amount", y="category", orientation="h"),
     use_container_width=True,
 )

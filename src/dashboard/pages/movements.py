@@ -13,7 +13,10 @@ start_date = st.session_state["start_date"]
 end_date = st.session_state["end_date"]
 
 st.title("Movimientos")
-search = st.text_input("Buscar en tipo de transacción", placeholder="Ej.: Pago, transferencia, Netflix")
+search = st.text_input(
+    "Buscar en tipo de transacción",
+    placeholder="Ej.: Pago, transferencia, Bled Cesar Adrian",
+)
 data = movements(engine, start_date, end_date, search)
 
 first, second = st.columns(2)

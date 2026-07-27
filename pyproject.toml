@@ -8,6 +8,7 @@ version = "0.1.0"
 description = "Local cost-management automation"
 requires-python = ">=3.12"
 dependencies = [
+  "dbt-postgres>=1.9,<2",
   "pandas>=2.2,<3",
   "psycopg[binary]>=3.2,<4",
   "python-dotenv>=1.0,<2",
