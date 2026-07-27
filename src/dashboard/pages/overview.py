@@ -36,17 +36,17 @@ with left:
     st.subheader("Saldo diario")
     st.plotly_chart(
         px.line(balance_data, x="release_date", y="partial_balance", markers=True),
-        use_container_width=True,
+        width="stretch",
     )
 with right:
     st.subheader("Ingresos y egresos diarios")
     st.plotly_chart(
         px.bar(flow_data, x="release_date", y=["income", "expenses"], barmode="relative"),
-        use_container_width=True,
+        width="stretch",
     )
 
 st.subheader("Egresos por categoría")
 st.plotly_chart(
     px.bar(expense_data.sort_values("amount"), x="amount", y="category", orientation="h"),
-    use_container_width=True,
+    width="stretch",
 )

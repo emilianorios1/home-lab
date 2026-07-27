@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import date, timedelta
+
 import streamlit as st
 
 from core.database import get_engine
@@ -13,9 +15,8 @@ engine = get_engine()
 date_range = available_date_range(engine)
 
 if date_range is None:
-    st.title("home-lab")
-    st.info("Todavía no hay transacciones importadas.")
-    st.stop()
+    today = date.today()
+    date_range = (today - timedelta(days=30), today)
 
 with st.sidebar:
     st.header("Filtros")
@@ -34,6 +35,7 @@ navigation = st.navigation(
     [
         st.Page("pages/overview.py", title="Resumen", icon="📊", default=True),
         st.Page("pages/movements.py", title="Movimientos", icon="🧾"),
+        st.Page("pages/documents.py", title="Documentos", icon="📄"),
     ]
 )
 navigation.run()

@@ -9,8 +9,11 @@ description = "Local cost-management automation"
 requires-python = ">=3.12"
 dependencies = [
   "dbt-postgres>=1.9,<2",
+  "google-api-python-client>=2.160,<3",
+  "google-auth-oauthlib>=1.2,<2",
   "pandas>=2.2,<3",
   "psycopg[binary]>=3.2,<4",
+  "pypdf>=5.1,<7",
   "python-dotenv>=1.0,<2",
   "SQLAlchemy>=2.0,<3",
   "streamlit>=1.40,<2",

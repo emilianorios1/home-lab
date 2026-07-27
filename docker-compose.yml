@@ -21,8 +21,11 @@ services:
       dockerfile: Dockerfile.dashboard
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      DOCUMENT_STORE_PATH: /data/gmail
     ports:
       - "127.0.0.1:8501:8501"
+    volumes:
+      - ./data/bronze/gmail:/data/gmail:ro
     depends_on:
       postgres:
         condition: service_healthy

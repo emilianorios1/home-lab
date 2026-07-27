@@ -1,8 +1,8 @@
 version: 2
 
 sources:
-  - name: raw
-    schema: raw
+  - name: bronze
+    schema: bronze
     tables:
       - name: mercadopago_account_statements
         columns:
@@ -13,3 +13,28 @@ sources:
           - name: batch_id
             data_tests:
               - not_null
+      - name: gmail_messages
+        columns:
+          - name: message_id
+            data_tests:
+              - not_null
+              - unique
+      - name: gmail_attachments
+        columns:
+          - name: id
+            data_tests:
+              - not_null
+              - unique
+          - name: message_id
+            data_tests:
+              - not_null
+              - relationships:
+                  arguments:
+                    to: source('bronze', 'gmail_messages')
+                    field: message_id
+      - name: document_parse_results
+        columns:
+          - name: id
+            data_tests:
+              - not_null
+              - unique

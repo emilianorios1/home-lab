@@ -1,127 +1,176 @@
 # home-lab
 
-Base local para automatizar la gestión de costos, comenzando por la importación manual de extractos de cuenta de Mercado Pago.
+Plataforma local para integrar movimientos financieros y documentos recibidos por
+Gmail. Usa PostgreSQL, dbt y Streamlit con una arquitectura medallion.
 
 ## Arquitectura
 
 ```text
-data/raw/account_statement.csv
-            │
-            ▼
- app/cli.py ──► pipelines/mercadopago_account_statement.py
-                         │ transform(DataFrame)
-                         ▼
-                  core/core.py + core/etl.py
-                         │
-                         ▼
-              PostgreSQL: raw.import_batches
-                          raw.mercadopago_account_statements
-                         │
-                         ▼
-                    dbt: analytics
-                         │
-                         ▼
-          dashboard/ (Streamlit, solo lectura)
+Mercado Pago CSV ───────────────┐
+                               ▼
+Gmail API ──► PDF/metadata ──► Bronze ──► parser PDF ──► Silver ──► Gold
+                                                          │          │
+                                                          └────┬─────┘
+                                                               ▼
+                                                    Streamlit (solo lectura)
 ```
 
-- `app/`: puntos de entrada. Hoy contiene el CLI para crear el esquema e importar un CSV.
-- `core/core.py`: runner genérico que coordina la lectura, transformación, auditoría y carga atómica de un CSV.
-- `core/etl.py`: helpers pequeños de pandas para validar CSV y cargar DataFrames.
-- `core/database.py`: conexión a PostgreSQL e inicialización de las tablas raw.
-- `pipelines/`: configuración y transformación específica de cada fuente. No contiene conexiones ni SQL de carga.
-- `raw`: capa de datos sin reglas de negocio. Conserva movimientos tipados y el lote de archivo que los originó.
-- `dbt/`: modelos y pruebas de la capa `analytics`, incluidas las reglas de categorización.
-- `dashboard/`: interfaz Streamlit de solo lectura para visualizar flujo, saldos y movimientos.
+- **Bronze** conserva fuentes reproducibles: movimientos originales, mensajes,
+  adjuntos, texto extraído y resultados versionados del parser.
+- **Silver** normaliza movimientos, documentos, facturas, vencimientos y conceptos.
+- **Gold** disponibiliza movimientos, obligaciones, documentos y candidatos de
+  conciliación.
 
-La capa `analytics` contiene reglas de categorización versionadas y vistas derivadas para
-que el dashboard muestre gastos por categoría sin alterar los datos raw. Actualmente,
-los egresos destinados a `Bled Cesar Adrian` se categorizan como `Alquiler`; los demás
-quedan como `Sin categorizar`.
+Los PDF viven fuera de PostgreSQL en almacenamiento content-addressed. La base sólo
+guarda su ruta relativa, SHA-256, tamaño, tipo y trazabilidad. Un correo se deduplica
+por `message_id`, un adjunto por `message_id + attachment_id` y un documento por su
+hash.
 
-## PostgreSQL local
+## Puesta en marcha
 
-1. Copiá la configuración de ejemplo si todavía no existe:
+Copiá la configuración y levantá PostgreSQL:
 
-   ```bash
-   cp .env.example .env
-   ```
+```bash
+cp .env.example .env
+docker compose up -d postgres
+python3 -m venv .venv
+.venv/bin/pip install -e '.[dev]'
+.venv/bin/python -m app.cli init-db
+```
 
-2. Levantá la base:
+Los datos financieros, documentos y secretos están excluidos de Git.
 
-   ```bash
-   docker compose up -d
-   ```
+## Importación de Mercado Pago
 
-3. Confirmá que esté disponible:
+```bash
+.venv/bin/python -m app.cli import-account-statement data/raw/account_statement.csv
+.venv/bin/python -m app.cli transform
+```
 
-   ```bash
-   docker compose ps
-   docker compose exec postgres psql -U home_lab -d home_lab
-   ```
+Las importaciones nuevas se escriben en `bronze`. Al inicializar una instalación
+existente, los lotes previos del esquema legado `raw` se copian sin eliminar el
+origen.
 
-Para detenerla, ejecutá `docker compose down`. Los datos viven en el volumen Docker `postgres_data` y se conservan al detener el servicio.
+## Configurar Gmail
 
-## Importaciones CSV
+La integración solicita únicamente acceso de lectura:
 
-Dejá las exportaciones manuales de Mercado Pago en `data/raw/`. Ese contenido no se versiona para evitar publicar datos financieros. La futura automatización procesará esos archivos y luego incorporará una integración por API.
+```text
+https://www.googleapis.com/auth/gmail.readonly
+```
 
-## Importador de Mercado Pago
-
-El importador es un CLI de Python. Crea el esquema `raw` y carga el CSV sin aplicar reglas de negocio: conserva las columnas de Mercado Pago con montos y fechas tipados para PostgreSQL.
-
-1. Creá el entorno e instalá dependencias:
-
-   ```bash
-   python3 -m venv .venv
-   .venv/bin/pip install -e '.[dev]'
-   ```
-
-2. Inicializá el esquema:
+1. En un proyecto de Google Cloud, habilitá Gmail API.
+2. Creá un cliente OAuth para aplicación de escritorio.
+3. Descargá el JSON como `secrets/gmail_client_secret.json`.
+4. Autorizá la cuenta desde una sesión local:
 
    ```bash
-   .venv/bin/python -m app.cli init-db
+   .venv/bin/python -m app.cli gmail-auth
    ```
 
-3. Importá un extracto de cuenta explícitamente:
+El token se guarda en `secrets/gmail_token.json` con permisos restringidos. No se
+almacena la contraseña de Gmail.
 
-   ```bash
-   .venv/bin/python -m app.cli import-account-statement data/raw/account_statement.csv
-   ```
+El filtro predeterminado se configura en `.env`:
 
-4. Construí y validá la capa analítica:
+```dotenv
+GMAIL_QUERY=from:no_reply@zetace.com.ar has:attachment filename:pdf
+```
 
-   ```bash
-   .venv/bin/python -m app.cli transform
-   ```
+Para ejecutar el flujo completo:
 
-Al importar otra vez el mismo nombre de archivo, el lote anterior se reemplaza de forma atómica. Los archivos con otro nombre se guardan como lotes independientes.
+```bash
+.venv/bin/python -m app.cli sync-gmail
+```
 
-Podés correr los tests con:
+Ese comando descarga adjuntos nuevos, procesa documentos pendientes y ejecuta
+`dbt build`. Es idempotente: repetirlo no duplica correos ni PDF.
+
+### Automatización
+
+El script usa `flock` para impedir ejecuciones superpuestas:
+
+```bash
+scripts/sync-gmail.sh
+```
+
+Ejemplo de cron diario a las 07:15:
+
+```cron
+15 7 * * * /home/emiliano/home-lab/scripts/sync-gmail.sh >> /home/emiliano/home-lab/data/gmail-sync.log 2>&1
+```
+
+## Parser de expensas Zeta
+
+El parser `zetace_expenses` extrae:
+
+- consorcio, unidad, período y fecha de emisión;
+- primer y segundo vencimiento con sus importes;
+- expensas generales y extraordinarias;
+- saldo anterior y cobranzas.
+
+Cada resultado conserva nombre y versión del parser. Los estados posibles son
+`parsed`, `unsupported` y `failed`, permitiendo corregir el parser y reprocesar sin
+volver a consultar Gmail.
+
+Para probar o recuperar un PDF local:
+
+```bash
+.venv/bin/python -m app.cli import-document /ruta/al/documento.pdf
+.venv/bin/python -m app.cli transform
+```
+
+## Modelos de datos
+
+Tablas y vistas principales:
+
+```text
+bronze.gmail_messages
+bronze.gmail_attachments
+bronze.document_parse_results
+bronze.mercadopago_account_statements
+
+silver.movements
+silver.documents
+silver.invoices
+silver.invoice_due_dates
+silver.invoice_line_items
+
+gold.movements
+gold.bills
+gold.documents
+gold.movement_document_candidates
+```
+
+Una factura es una obligación y no un movimiento realizado. Gold conserva esa
+separación y genera candidatos de conciliación cuando coinciden el importe y una
+ventana razonable alrededor del vencimiento.
+
+## Dashboard
+
+Construí Gold y levantá la aplicación:
+
+```bash
+.venv/bin/python -m app.cli transform
+docker compose up -d --build dashboard
+```
+
+Abrí [http://localhost:8501](http://localhost:8501). El dashboard ofrece:
+
+- resumen y movimientos financieros;
+- documentos y facturas;
+- vencimientos e importes;
+- descarga del PDF original;
+- estado y errores de parsing.
+
+El almacenamiento documental se monta como sólo lectura dentro del contenedor.
+
+## Validación
 
 ```bash
 .venv/bin/python -m pytest
+.venv/bin/python -m app.cli transform
 ```
 
-### Agregar otra pipeline CSV
-
-Una pipeline nueva sólo necesita declarar:
-
-- las columnas esperadas y opciones de `pandas.read_csv`;
-- los tipos de las columnas de destino;
-- una función `transform(dataframe)`;
-- una función `process(path)` que llame a `run_csv_pipeline`.
-
-La lectura, conexión, creación del lote, transacción y carga con `DataFrame.to_sql`
-quedan centralizadas en `core`. Si más adelante una fuente necesita API, archivos
-grandes o una estrategia de carga diferente, se puede agregar esa capacidad sin
-complicar las pipelines CSV existentes.
-
-## Dashboard local
-
-El dashboard Streamlit muestra flujo, saldo y movimientos del extracto de cuenta. Levantalo junto a PostgreSQL:
-
-```bash
-docker compose up -d --build
-```
-
-Abrí [http://localhost:8501](http://localhost:8501). El servicio queda expuesto únicamente en esta máquina y solo consulta datos; no modifica movimientos ni lotes importados.
+dbt valida claves, relaciones, estados aceptados y que los conceptos de una expensa
+sumen el importe del primer vencimiento.
