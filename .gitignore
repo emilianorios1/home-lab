@@ -1,5 +1,8 @@
 # Local configuration
 .env
+.venv/
+__pycache__/
+.pytest_cache/
 
 # Manual data imports; keep the directory itself in the repository.
 data/raw/*
