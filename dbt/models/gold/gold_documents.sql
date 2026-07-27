@@ -21,6 +21,8 @@ select
     i.first_due_date,
     i.first_due_amount,
     i.second_due_date,
-    i.second_due_amount
+    i.second_due_amount,
+    i.due_date_kind,
+    i.total_amount
 from {{ ref('silver_documents') }} d
 left join {{ ref('silver_invoices') }} i using (document_id)

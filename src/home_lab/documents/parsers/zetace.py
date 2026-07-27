@@ -162,6 +162,7 @@ def parse(text: str) -> dict[str, Any]:
         "first_due_amount": str(first_due_amount),
         "second_due_date": second_due_date.isoformat(),
         "second_due_amount": str(second_due_amount),
+        "due_date_kind": "alternative",
         "previous_balance": (
             str(value) if (value := _amount_line(text, r"SALDO\s+ANTERIOR")) is not None else None
         ),

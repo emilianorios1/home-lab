@@ -71,10 +71,11 @@ https://www.googleapis.com/auth/gmail.readonly
 El token se guarda en `secrets/gmail_token.json` con permisos restringidos. No se
 almacena la contraseña de Gmail.
 
-El filtro predeterminado se configura en `.env`:
+El filtro predeterminado se configura en `.env`. Incluye adjuntos PDF de Zeta y
+facturas de EPE enlazadas desde el botón `ver factura`:
 
 ```dotenv
-GMAIL_QUERY=from:no_reply@zetace.com.ar has:attachment filename:pdf
+GMAIL_QUERY={from:no_reply@zetace.com.ar from:oficinavirtual@epe.santafe.gov.ar} newer_than:30d
 ```
 
 Para ejecutar el flujo completo:
@@ -112,6 +113,15 @@ El parser `zetace_expenses` extrae:
 Cada resultado conserva nombre y versión del parser. Los estados posibles son
 `parsed`, `unsupported` y `failed`, permitiendo corregir el parser y reprocesar sin
 volver a consultar Gmail.
+
+## Facturas de EPE
+
+Los correos de EPE no adjuntan el documento. El flujo reconoce únicamente enlaces
+del endpoint oficial de facturación de EPE, sigue su redirección a HTTPS, valida la
+firma PDF y aplica el mismo límite de tamaño que a un adjunto. El parser
+`epe_electricity_bill` extrae cliente, domicilio del suministro, emisión, consumo,
+total y las dos cuotas con sus vencimientos. Las cuotas se publican como
+vencimientos independientes para permitir su conciliación con movimientos.
 
 Para probar o recuperar un PDF local:
 

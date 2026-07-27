@@ -37,7 +37,7 @@ def gmail_query() -> str:
     load_dotenv()
     return os.getenv(
         "GMAIL_QUERY",
-        "from:no_reply@zetace.com.ar has:attachment filename:pdf",
+        "{from:no_reply@zetace.com.ar from:oficinavirtual@epe.santafe.gov.ar} newer_than:30d",
     )
 
 

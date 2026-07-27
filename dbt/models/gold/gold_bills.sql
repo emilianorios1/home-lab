@@ -12,7 +12,11 @@ select
     first_due_amount,
     second_due_date,
     second_due_amount,
+    due_date_kind,
+    total_amount,
     case
+        when due_date_kind = 'installment'
+            then coalesce(total_amount, first_due_amount + second_due_amount)
         when current_date <= first_due_date then first_due_amount
         else second_due_amount
     end as current_amount,

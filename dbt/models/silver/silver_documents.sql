@@ -22,8 +22,11 @@ select
     m.sender,
     m.subject,
     m.received_at,
-    p.parser_name,
-    p.parser_version,
+    coalesce(p.extracted_data ->> 'source_parser', p.parser_name) as parser_name,
+    coalesce(
+        p.extracted_data ->> 'source_parser_version',
+        p.parser_version
+    ) as parser_version,
     coalesce(p.status, 'pending') as parse_status,
     p.page_count,
     p.extracted_data,
