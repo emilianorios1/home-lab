@@ -44,25 +44,49 @@ selected_dues as (
            d.due_date_kind = 'alternative'
            and d.due_number = a.selected_due_number
        )
+),
+
+automatic_items as (
+    select
+        date_trunc('month', due_date)::date as summary_month,
+        case document_type
+            when 'condominium_expense' then 'Expensas'
+            when 'electricity_bill' then 'Luz'
+            when 'water_bill' then 'Agua'
+            when 'gas_bill' then 'Gas'
+            when 'property_tax_bill' then 'TGI'
+        end as category,
+        invoice_id,
+        document_id,
+        issuer,
+        due_number,
+        due_date,
+        amount as expected_amount,
+        payment_date,
+        paid_amount,
+        confidence,
+        case when payment_date is null then 'pending' else 'paid' end as payment_status
+    from selected_dues
+),
+
+manual_items as (
+    select
+        summary_month,
+        category,
+        null::bigint as invoice_id,
+        null::bigint as document_id,
+        issuer,
+        null::integer as due_number,
+        due_date,
+        expected_amount,
+        payment_date,
+        paid_amount,
+        case when payment_status = 'paid' then 1.00 else null end::numeric(4, 2)
+            as confidence,
+        payment_status
+    from {{ source('bronze', 'manual_shared_expenses') }}
 )
 
-select
-    date_trunc('month', due_date)::date as summary_month,
-    case document_type
-        when 'condominium_expense' then 'Expensas'
-        when 'electricity_bill' then 'Luz'
-        when 'water_bill' then 'Agua'
-        when 'gas_bill' then 'Gas'
-        when 'property_tax_bill' then 'TGI'
-    end as category,
-    invoice_id,
-    document_id,
-    issuer,
-    due_number,
-    due_date,
-    amount as expected_amount,
-    payment_date,
-    paid_amount,
-    confidence,
-    case when payment_date is null then 'pending' else 'paid' end as payment_status
-from selected_dues
+select * from automatic_items
+union all
+select * from manual_items
