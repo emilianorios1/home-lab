@@ -26,6 +26,8 @@ ASSA_INVOICE_PATH = "/download-comprobante.php"
 LITORAL_TRACKING_HOST = "relaytrk.digital.litoralgas.com.ar"
 LITORAL_INVOICE_HOST = "litoral.ecofactura.com.ar"
 LITORAL_INVOICE_PATH = "/FD/"
+NARANJA_STATEMENT_HOST = "resumen.naranja.com"
+NARANJA_STATEMENT_PATH = "/statements/withoutkey"
 
 
 @dataclass(frozen=True)
@@ -189,6 +191,13 @@ def _invoice_kind(url: str) -> str | None:
         and parsed.path == LITORAL_INVOICE_PATH
     ):
         return "litoral-gas"
+    if (
+        parsed.scheme == "https"
+        and host == NARANJA_STATEMENT_HOST
+        and parsed.path == NARANJA_STATEMENT_PATH
+        and parse_qs(parsed.query).get("statement")
+    ):
+        return "naranja-x"
     return None
 
 
@@ -216,9 +225,11 @@ def linked_pdfs(message: dict[str, Any]) -> Iterator[LinkedPdf]:
                 customer = query.get("uf", ["unknown"])[0]
                 period = query.get("periodo", ["unknown"])[0]
                 filename = f"assa-{customer}-{period}.pdf"
-            else:
+            elif kind == "litoral-gas":
                 reference = query.get("p", ["unknown"])[0]
                 filename = f"litoral-gas-{reference}.pdf"
+            else:
+                filename = f"naranja-x-{sha256(target.encode('utf-8')).hexdigest()[:16]}.pdf"
             digest = sha256(target.encode("utf-8")).hexdigest()
             yield LinkedPdf(
                 attachment_id=f"linked:{digest}",
@@ -232,7 +243,13 @@ def download_linked_pdf(url: str, max_bytes: int) -> bytes:
     expected_kind = _invoice_kind(url)
     if expected_kind is None:
         raise ValueError("Linked PDF URL is not an allow-listed invoice endpoint")
-    request = Request(url, headers={"User-Agent": "home-lab/0.1"})
+    user_agent = (
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+        if expected_kind == "naranja-x"
+        else "home-lab/0.1"
+    )
+    request = Request(url, headers={"User-Agent": user_agent})
     with urlopen(request, timeout=30) as response:
         if _invoice_kind(response.geturl()) != expected_kind:
             raise ValueError("Linked PDF redirected outside its invoice endpoint")

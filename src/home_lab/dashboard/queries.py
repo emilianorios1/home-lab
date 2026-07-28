@@ -19,6 +19,9 @@ def available_date_range(engine: Engine) -> tuple[date, date] | None:
                     UNION ALL
                     SELECT coalesce(issue_date, received_at::date) AS value
                     FROM gold.documents
+                    UNION ALL
+                    SELECT purchase_date AS value
+                    FROM gold.credit_card_expenses
                 )
                 SELECT min(value) AS start_date, max(value) AS end_date
                 FROM dates
@@ -139,6 +142,95 @@ def movements(
             "search_pattern": f"%{search.strip()}%",
             "limit": limit,
         },
+    )
+
+
+def credit_card_expenses(
+    engine: Engine,
+    start_date: date,
+    end_date: date,
+    search: str = "",
+) -> pd.DataFrame:
+    return pd.read_sql(
+        text(
+            """
+            SELECT
+                purchase_date,
+                category,
+                description,
+                card,
+                installment,
+                currency,
+                amount,
+                statement_period,
+                statement_due_date
+            FROM gold.credit_card_expenses
+            WHERE purchase_date BETWEEN :start_date AND :end_date
+              AND (
+                  :search = ''
+                  OR description ILIKE :search_pattern
+                  OR category ILIKE :search_pattern
+              )
+            ORDER BY purchase_date DESC, statement_id DESC, line_number DESC
+            """
+        ),
+        engine,
+        params={
+            "start_date": start_date,
+            "end_date": end_date,
+            "search": search.strip(),
+            "search_pattern": f"%{search.strip()}%",
+        },
+    )
+
+
+def credit_card_expenses_by_category(
+    engine: Engine,
+    start_date: date,
+    end_date: date,
+) -> pd.DataFrame:
+    return pd.read_sql(
+        text(
+            """
+            SELECT category, sum(amount) AS amount
+            FROM gold.credit_card_expenses
+            WHERE purchase_date BETWEEN :start_date AND :end_date
+              AND currency = 'ARS'
+            GROUP BY category
+            ORDER BY amount DESC
+            """
+        ),
+        engine,
+        params={"start_date": start_date, "end_date": end_date},
+    )
+
+
+def credit_card_statements(
+    engine: Engine,
+    start_date: date,
+    end_date: date,
+) -> pd.DataFrame:
+    return pd.read_sql(
+        text(
+            """
+            SELECT
+                bill_id AS statement_id,
+                period,
+                issue_date,
+                first_due_date AS due_date,
+                total_amount,
+                foreign_total_amount,
+                foreign_currency,
+                minimum_payment,
+                status
+            FROM gold.bills
+            WHERE document_type = 'credit_card_statement'
+              AND issue_date BETWEEN :start_date AND :end_date
+            ORDER BY issue_date DESC, bill_id DESC
+            """
+        ),
+        engine,
+        params={"start_date": start_date, "end_date": end_date},
     )
 
 

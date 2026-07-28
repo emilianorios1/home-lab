@@ -122,3 +122,19 @@ def test_finds_litoral_gas_invoice_behind_tracking_link() -> None:
     assert len(links) == 1
     assert links[0].filename == "litoral-gas-invoice-reference.pdf"
     assert links[0].url == target
+
+
+def test_finds_naranja_x_statement_link() -> None:
+    target = (
+        "https://resumen.naranja.com/statements/withoutkey"
+        "?statement=opaque-statement-token"
+    )
+
+    links = list(
+        linked_pdfs(_html_message(f"<a href='{target}'>Descargar resumen</a>"))
+    )
+
+    assert len(links) == 1
+    assert links[0].filename.startswith("naranja-x-")
+    assert links[0].filename.endswith(".pdf")
+    assert links[0].url == target

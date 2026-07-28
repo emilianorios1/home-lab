@@ -136,11 +136,12 @@ https://www.googleapis.com/auth/gmail.readonly
 El token se guarda en `secrets/gmail_token.json` con permisos restringidos. No se
 almacena la contraseña de Gmail.
 
-El filtro predeterminado se configura en `.env`. Incluye adjuntos PDF de Zeta y
-facturas enlazadas de EPE, Aguas Santafesinas y Litoral Gas:
+El filtro predeterminado se configura en `.env`. Incluye adjuntos PDF de Zeta,
+facturas enlazadas de EPE, Aguas Santafesinas y Litoral Gas, y resúmenes de
+Naranja X:
 
 ```dotenv
-GMAIL_QUERY={from:no_reply@zetace.com.ar from:oficinavirtual@epe.santafe.gov.ar from:facturadigital@aguassantafesinas.com from:factura@digital.litoralgas.com.ar} newer_than:30d
+GMAIL_QUERY={from:no_reply@zetace.com.ar from:oficinavirtual@epe.santafe.gov.ar from:facturadigital@aguassantafesinas.com from:factura@digital.litoralgas.com.ar from:avisos@info.naranjax.com} newer_than:45d
 ```
 
 Para ejecutar el flujo completo:
@@ -239,6 +240,18 @@ El parser `rosario_tgi_bill` extrae cuenta, inmueble, período, emisión, vencim
 e importe. La cuenta y el código son secretos locales y nunca se escriben en logs
 ni en metadatos de ingesta.
 
+## Resúmenes de Naranja X
+
+Los correos de Naranja X contienen un enlace al PDF en lugar de adjuntarlo. El
+flujo sólo admite el endpoint oficial de resúmenes, valida que la respuesta sea un
+PDF y aplica el límite de tamaño configurado.
+
+El parser extrae cierre, vencimiento, total en pesos y dólares, entrega mínima y
+cada consumo o cargo con fecha, tarjeta, cupón, plan, moneda e importe. El resumen
+se publica como obligación y los consumos en `gold.credit_card_expenses`. Estos
+últimos se muestran separados de `gold.movements` para no duplicar el gasto cuando
+posteriormente se paga el resumen.
+
 ## Modelos de datos
 
 Tablas y vistas principales:
@@ -254,11 +267,13 @@ silver.documents
 silver.invoices
 silver.invoice_due_dates
 silver.invoice_line_items
+silver.credit_card_transactions
 
 gold.movements
 gold.bills
 gold.documents
 gold.movement_document_candidates
+gold.credit_card_expenses
 ```
 
 Una factura es una obligación y no un movimiento realizado. Gold conserva esa

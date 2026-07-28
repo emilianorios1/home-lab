@@ -7,6 +7,9 @@ from sqlalchemy import text
 from home_lab.cli import run_transform
 from home_lab.dashboard.queries import (
     available_date_range,
+    credit_card_expenses,
+    credit_card_expenses_by_category,
+    credit_card_statements,
     daily_balance,
     expenses_by_category,
     monthly_shared_expenses,
@@ -97,3 +100,36 @@ def test_monthly_shared_expenses_have_monthly_summary_shape() -> None:
     )
     assert 0 <= summary["payment_progress"] <= 1
     assert abs(summary["per_person"] - summary["shared_total"] / 2) <= 0.005
+
+
+def test_credit_card_queries_have_expected_shape() -> None:
+    engine = get_engine()
+    expenses = credit_card_expenses(
+        engine,
+        date(2026, 1, 1),
+        date(2026, 12, 31),
+    )
+    categories = credit_card_expenses_by_category(
+        engine,
+        date(2026, 1, 1),
+        date(2026, 12, 31),
+    )
+    statements = credit_card_statements(
+        engine,
+        date(2026, 1, 1),
+        date(2026, 12, 31),
+    )
+    assert {
+        "purchase_date",
+        "category",
+        "description",
+        "currency",
+        "amount",
+    }.issubset(expenses.columns)
+    assert {"category", "amount"}.issubset(categories.columns)
+    assert {
+        "period",
+        "due_date",
+        "total_amount",
+        "foreign_total_amount",
+    }.issubset(statements.columns)

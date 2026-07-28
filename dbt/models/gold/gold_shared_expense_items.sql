@@ -19,6 +19,13 @@ with invoice_dues as (
     left join {{ ref('gold_bill_payments') }} p
       on p.invoice_id = d.invoice_id
      and p.due_number = d.due_number
+    where i.document_type in (
+        'condominium_expense',
+        'electricity_bill',
+        'water_bill',
+        'gas_bill',
+        'property_tax_bill'
+    )
 ),
 
 alternative_choice as (
