@@ -70,12 +70,13 @@ def test_bled_cesar_adrian_expenses_are_rent(tmp_path: Path) -> None:
             )
 
 
-def test_monthly_shared_expenses_have_spreadsheet_shape() -> None:
+def test_monthly_shared_expenses_have_monthly_summary_shape() -> None:
     engine = get_engine()
     months = shared_expense_months(engine)
     assert months
     summary = monthly_shared_expenses(engine, months[0])
     rows = summary["rows"]
+    services = summary["services"]
     assert list(rows["concept"]) == [
         "Alquiler bruto",
         "Expensas extraordinarias",
@@ -86,4 +87,13 @@ def test_monthly_shared_expenses_have_spreadsheet_shape() -> None:
         "Gas",
         "TGI",
     ]
+    assert list(services["category"]) == ["Expensas", "Luz", "Agua", "Gas", "TGI"]
+    assert summary["rent"]["gross"] == (
+        summary["rent"]["net"] + summary["rent"]["extraordinary"]
+    )
+    assert summary["pending_total"] == max(
+        summary["shared_total"] - summary["paid_total"],
+        0,
+    )
+    assert 0 <= summary["payment_progress"] <= 1
     assert abs(summary["per_person"] - summary["shared_total"] / 2) <= 0.005
