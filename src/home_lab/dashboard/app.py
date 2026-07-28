@@ -33,7 +33,13 @@ with st.sidebar:
 
 navigation = st.navigation(
     [
-        st.Page("pages/overview.py", title="Resumen", icon="📊", default=True),
+        st.Page(
+            "pages/shared_expenses.py",
+            title="Gastos compartidos",
+            icon="🏠",
+            default=True,
+        ),
+        st.Page("pages/overview.py", title="Flujo general", icon="📊"),
         st.Page("pages/movements.py", title="Movimientos", icon="🧾"),
         st.Page("pages/documents.py", title="Documentos", icon="📄"),
     ]

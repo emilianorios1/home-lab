@@ -4,6 +4,12 @@ sources:
   - name: bronze
     schema: bronze
     tables:
+      - name: import_batches
+        columns:
+          - name: id
+            data_tests:
+              - not_null
+              - unique
       - name: mercadopago_account_statements
         columns:
           - name: id

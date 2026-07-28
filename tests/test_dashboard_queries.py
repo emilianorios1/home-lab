@@ -9,8 +9,10 @@ from home_lab.dashboard.queries import (
     available_date_range,
     daily_balance,
     expenses_by_category,
+    monthly_shared_expenses,
     movements,
     overview,
+    shared_expense_months,
 )
 from home_lab.database import create_schema, get_engine
 from home_lab.mercadopago.importer import CSV_COLUMNS, process
@@ -66,3 +68,22 @@ def test_bled_cesar_adrian_expenses_are_rent(tmp_path: Path) -> None:
                 text("DELETE FROM bronze.import_batches WHERE source_filename = :filename"),
                 {"filename": source.name},
             )
+
+
+def test_monthly_shared_expenses_have_spreadsheet_shape() -> None:
+    engine = get_engine()
+    months = shared_expense_months(engine)
+    assert months
+    summary = monthly_shared_expenses(engine, months[0])
+    rows = summary["rows"]
+    assert list(rows["concept"]) == [
+        "Alquiler bruto",
+        "Expensas extraordinarias",
+        "Expensas a pagar",
+        "Alquiler a pagar",
+        "Luz",
+        "Agua",
+        "Gas",
+        "TGI",
+    ]
+    assert abs(summary["per_person"] - summary["shared_total"] / 2) <= 0.005

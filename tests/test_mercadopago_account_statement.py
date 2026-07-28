@@ -58,6 +58,22 @@ def test_transform_api_report_maps_official_columns() -> None:
     assert record["partial_balance"] is None
 
 
+def test_transform_api_prefers_human_readable_description() -> None:
+    dataframe = pd.DataFrame(
+        [
+            {
+                "SOURCE_ID": "payment-1",
+                "TRANSACTION_TYPE": "PAYOUTS",
+                "DESCRIPTION": "Transferencia enviada Bled Cesar Adrian",
+                "TRANSACTION_AMOUNT": "-578650.00",
+                "TRANSACTION_DATE": "2026-07-10T12:00:00Z",
+            }
+        ]
+    )
+    record = transform_api(dataframe).iloc[0]
+    assert record["transaction_type"] == "Transferencia enviada Bled Cesar Adrian"
+
+
 def test_transform_api_falls_back_to_external_reference() -> None:
     dataframe = pd.DataFrame(
         [

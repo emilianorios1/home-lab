@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 
 import pandas as pd
 from sqlalchemy import Engine, text
@@ -189,3 +189,144 @@ def documents(
             "limit": limit,
         },
     )
+
+
+def shared_expense_months(engine: Engine) -> list[date]:
+    with engine.connect() as connection:
+        rows = connection.execute(
+            text(
+                """
+                SELECT DISTINCT summary_month
+                FROM (
+                    SELECT summary_month
+                    FROM gold.shared_expense_items
+                    UNION ALL
+                    SELECT date_trunc('month', release_date)::date
+                    FROM gold.movements
+                    WHERE category = 'Alquiler'
+                ) months
+                WHERE summary_month IS NOT NULL
+                ORDER BY summary_month
+                """
+            )
+        )
+    return [row.summary_month for row in rows]
+
+
+def monthly_shared_expenses(engine: Engine, month: date) -> dict[str, object]:
+    """Build the spreadsheet-style monthly household expense summary."""
+    with engine.connect() as connection:
+        bill_rows = connection.execute(
+            text(
+                """
+                SELECT
+                    category,
+                    sum(expected_amount) AS expected_amount,
+                    sum(coalesce(paid_amount, 0)) AS paid_amount,
+                    count(*) AS bill_count,
+                    count(*) FILTER (WHERE payment_status = 'paid') AS paid_count
+                FROM gold.shared_expense_items
+                WHERE summary_month = :month
+                GROUP BY category
+                """
+            ),
+            {"month": month},
+        )
+        bills = {row.category: row for row in bill_rows}
+        rent_net = connection.execute(
+            text(
+                """
+                SELECT coalesce(sum(abs(amount)), 0)
+                FROM gold.movements
+                WHERE category = 'Alquiler'
+                  AND date_trunc('month', release_date)::date = :month
+                """
+            ),
+            {"month": month},
+        ).scalar_one()
+        extraordinary = connection.execute(
+            text(
+                """
+                SELECT coalesce(sum(items.amount), 0)
+                FROM silver.invoice_line_items items
+                JOIN silver.invoices invoices using (invoice_id)
+                WHERE items.concept_code = 'extraordinary_expenses'
+                  AND date_trunc('month', invoices.first_due_date)::date = :month
+                """
+            ),
+            {"month": month},
+        ).scalar_one()
+
+    rent_net = Decimal(rent_net)
+    extraordinary = Decimal(extraordinary)
+    gross_rent = rent_net + extraordinary
+
+    def bill_values(category: str) -> tuple[Decimal, Decimal, str]:
+        bill = bills.get(category)
+        if bill is None:
+            return Decimal("0"), Decimal("0"), "Sin factura"
+        expected = Decimal(bill.expected_amount)
+        paid = Decimal(bill.paid_amount)
+        if bill.paid_count == bill.bill_count:
+            status = "Pagado"
+        elif bill.paid_count:
+            status = "Parcial"
+        else:
+            status = "Pendiente"
+        return expected, paid, status
+
+    rows: list[dict[str, object]] = [
+        {
+            "concept": "Alquiler bruto",
+            "amount": gross_rent,
+            "paid_amount": rent_net,
+            "status": "Calculado" if rent_net else "Sin movimiento",
+        },
+        {
+            "concept": "Expensas extraordinarias",
+            "amount": extraordinary,
+            "paid_amount": extraordinary if rent_net else Decimal("0"),
+            "status": "Descontado" if extraordinary else "Sin factura",
+        },
+    ]
+    expected_bills = Decimal("0")
+    paid_bills = Decimal("0")
+    for category, label in (
+        ("Expensas", "Expensas a pagar"),
+        ("Luz", "Luz"),
+        ("Agua", "Agua"),
+        ("Gas", "Gas"),
+        ("TGI", "TGI"),
+    ):
+        expected, paid, status = bill_values(category)
+        expected_bills += expected
+        paid_bills += paid
+        row = {
+            "concept": label,
+            "amount": expected,
+            "paid_amount": paid,
+            "status": status,
+        }
+        rows.append(row)
+        if category == "Expensas":
+            rows.append(
+                {
+                    "concept": "Alquiler a pagar",
+                    "amount": rent_net,
+                    "paid_amount": rent_net,
+                    "status": "Pagado" if rent_net else "Sin movimiento",
+                }
+            )
+
+    shared_total = rent_net + expected_bills
+    paid_total = rent_net + paid_bills
+    return {
+        "month": month,
+        "rows": pd.DataFrame(rows),
+        "shared_total": shared_total,
+        "per_person": (shared_total / Decimal("2")).quantize(
+            Decimal("0.01"),
+            rounding=ROUND_HALF_UP,
+        ),
+        "paid_total": paid_total,
+    }

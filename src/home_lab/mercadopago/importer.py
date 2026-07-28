@@ -159,6 +159,10 @@ def transform_api(dataframe: pd.DataFrame) -> pd.DataFrame:
         )
     else:
         amounts = transaction_amounts
+    transaction_types = dataframe["TRANSACTION_TYPE"].str.strip()
+    descriptions = dataframe.get(
+        "DESCRIPTION", pd.Series("", index=dataframe.index)
+    ).str.strip()
     result = pd.DataFrame(
         {
             "release_date": pd.to_datetime(
@@ -166,9 +170,13 @@ def transform_api(dataframe: pd.DataFrame) -> pd.DataFrame:
                 errors="raise",
                 utc=True,
             ).dt.date,
-            "transaction_type": dataframe["TRANSACTION_TYPE"]
-            .str.strip()
-            .replace("", None),
+            # DESCRIPTION is the human-readable operation detail needed for
+            # household-expense categorization. Older configured reports did
+            # not include it, so retain TRANSACTION_TYPE as a safe fallback.
+            "transaction_type": descriptions.where(
+                descriptions != "",
+                transaction_types,
+            ).replace("", None),
             "transaction_net_amount": amounts.map(_api_decimal),
             # The official report has no running-balance field.
             "partial_balance": None,
