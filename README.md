@@ -9,6 +9,7 @@ Gmail. Usa PostgreSQL, dbt y Streamlit con una arquitectura medallion.
 Mercado Pago Reports API ───────┐
                                ▼
 Gmail API ──► PDF/metadata ──► Bronze ──► parser PDF ──► Silver ──► Gold
+SIAT TGI ───► boleta PDF ────────┘
                                                           │          │
                                                           └────┬─────┘
                                                                ▼
@@ -201,6 +202,42 @@ Para probar o recuperar un PDF local:
 .venv/bin/home-lab import-document /ruta/al/documento.pdf
 .venv/bin/home-lab transform
 ```
+
+## TGI de Rosario
+
+SIAT no ofrece una API pública, pero su gestión con código personal funciona con
+un flujo HTTP estable y no requiere un navegador ni CAPTCHA. La integración inicia
+una sesión anónima, descubre los períodos seleccionables y descarga cada boleta
+mensual desde el endpoint oficial. Las boletas se deduplican por cuenta y período.
+
+Guardá el número de cuenta y el código de gestión personal únicamente en `.env`:
+
+```dotenv
+SIAT_TGI_ACCOUNT=tu-numero-de-cuenta
+SIAT_TGI_MANAGEMENT_CODE=tu-codigo-de-gestion
+```
+
+Para descargar boletas nuevas, procesarlas y reconstruir Silver/Gold:
+
+```bash
+.venv/bin/home-lab sync-siat-tgi
+```
+
+El script de automatización usa `flock` para evitar ejecuciones superpuestas:
+
+```bash
+scripts/sync-siat-tgi.sh
+```
+
+Ejemplo semanal, los lunes a las 07:30:
+
+```cron
+30 7 * * 1 /home/emiliano/home-lab/scripts/sync-siat-tgi.sh >> /home/emiliano/home-lab/data/siat-tgi-sync.log 2>&1
+```
+
+El parser `rosario_tgi_bill` extrae cuenta, inmueble, período, emisión, vencimiento
+e importe. La cuenta y el código son secretos locales y nunca se escriben en logs
+ni en metadatos de ingesta.
 
 ## Modelos de datos
 

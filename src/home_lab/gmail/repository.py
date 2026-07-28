@@ -14,16 +14,16 @@ class GmailRepository:
     def __init__(self, engine: Engine) -> None:
         self.engine = engine
 
-    def start_run(self, run_id: UUID, query: str) -> None:
+    def start_run(self, run_id: UUID, query: str, *, source: str = "gmail") -> None:
         with self.engine.begin() as connection:
             connection.execute(
                 text(
                     """
                     INSERT INTO bronze.ingestion_runs (id, source, query, status)
-                    VALUES (:id, 'gmail', :query, 'running')
+                    VALUES (:id, :source, :query, 'running')
                     """
                 ),
-                {"id": run_id, "query": query},
+                {"id": run_id, "source": source, "query": query},
             )
 
     def finish_run(

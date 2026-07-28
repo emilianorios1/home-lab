@@ -22,5 +22,6 @@ where parse_status = 'parsed'
       'condominium_expense',
       'electricity_bill',
       'water_bill',
-      'gas_bill'
+      'gas_bill',
+      'property_tax_bill'
   )

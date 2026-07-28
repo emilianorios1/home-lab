@@ -21,6 +21,7 @@ from home_lab.mercadopago.pipeline import (
     configure_account_reports,
     sync_account_activity,
 )
+from home_lab.siat.pipeline import sync_tgi
 
 
 DBT_PROJECT_DIR = Path(__file__).resolve().parents[2] / "dbt"
@@ -109,6 +110,10 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser(
         "configure-mercadopago",
         help="Create/update the API report format required by home-lab",
+    )
+    subparsers.add_parser(
+        "sync-siat-tgi",
+        help="Download new Rosario TGI bills, parse them and build Silver/Gold",
     )
     return parser
 
@@ -221,6 +226,23 @@ def main() -> int:
             len(configuration.get("columns", [])),
         )
         return 0
+
+    if args.command == "sync-siat-tgi":
+        ingestion = sync_tgi()
+        parsed = parse_pending_documents()
+        if not run_transform():
+            logging.error("TGI bills imported, but dbt transformation failed")
+            return 1
+        logging.info(
+            "SIAT TGI sync complete: periods=%s bills=%s parsed=%s "
+            "unsupported=%s failed=%s",
+            ingestion.periods_discovered,
+            ingestion.bills_loaded,
+            parsed.parsed,
+            parsed.unsupported,
+            parsed.failed,
+        )
+        return int(parsed.failed > 0)
 
     if args.command == "transform":
         if not run_transform():
