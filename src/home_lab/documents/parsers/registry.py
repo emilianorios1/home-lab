@@ -5,11 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-from home_lab.documents.parsers import assa, epe, litoral_gas, zetace
+from home_lab.documents.parsers import assa, epe, litoral_gas, tgi, zetace
 
 
 PARSER_NAME = "financial_document_router"
-PARSER_VERSION = "1.1.0"
+PARSER_VERSION = "1.2.0"
 
 
 class ParserModule(Protocol):
@@ -28,7 +28,7 @@ class ParsedDocument:
     source_parser_version: str
 
 
-PARSERS: tuple[ParserModule, ...] = (zetace, epe, assa, litoral_gas)
+PARSERS: tuple[ParserModule, ...] = (zetace, epe, assa, litoral_gas, tgi)
 
 
 def parse(text: str) -> ParsedDocument | None:

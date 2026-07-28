@@ -24,7 +24,7 @@ models:
               arguments:
                 values: [pending, parsed, unsupported, failed]
   - name: silver_invoices
-    description: Facturas y expensas extraídas de documentos.
+    description: Facturas, tasas y expensas extraídas de documentos.
     columns:
       - name: invoice_id
         data_tests: [not_null, unique]

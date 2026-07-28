@@ -44,12 +44,24 @@ def gmail_query() -> str:
     )
 
 
-def mercadopago_access_token() -> str:
+def _required_setting(name: str) -> str:
     load_dotenv()
-    value = os.getenv("MERCADOPAGO_ACCESS_TOKEN")
+    value = os.getenv(name)
     if not value:
-        raise RuntimeError("MERCADOPAGO_ACCESS_TOKEN must be set in .env")
+        raise RuntimeError(f"{name} must be set in .env")
     return value
+
+
+def siat_tgi_account() -> str:
+    return _required_setting("SIAT_TGI_ACCOUNT")
+
+
+def siat_tgi_management_code() -> str:
+    return _required_setting("SIAT_TGI_MANAGEMENT_CODE")
+
+
+def mercadopago_access_token() -> str:
+    return _required_setting("MERCADOPAGO_ACCESS_TOKEN")
 
 
 def document_max_bytes() -> int:
