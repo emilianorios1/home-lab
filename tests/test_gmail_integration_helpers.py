@@ -69,3 +69,56 @@ def test_ignores_untrusted_pdf_link() -> None:
     }
 
     assert list(linked_pdfs(message)) == []
+
+
+def _html_message(html: str) -> dict:
+    encoded = base64.urlsafe_b64encode(html.encode()).decode().rstrip("=")
+    return {
+        "payload": {
+            "mimeType": "text/html",
+            "body": {"data": encoded},
+        }
+    }
+
+
+def test_finds_assa_invoice_behind_tracking_link() -> None:
+    import json
+    from urllib.parse import quote
+
+    target = (
+        "https://assa.facturadospuntocero.com/download-comprobante.php"
+        "?uf=00380921&tc=1&periodo=2026-04&key=secret"
+    )
+    payload = base64.b64encode(
+        json.dumps({"linkUrl": target}).encode()
+    ).decode()
+    tracking = (
+        "https://relaytrk.aguassantafesinas.com/Click/Track"
+        f"?p={quote(payload)}"
+    )
+
+    links = list(linked_pdfs(_html_message(f"<a href='{tracking}'>Ver Factura</a>")))
+
+    assert len(links) == 1
+    assert links[0].filename == "assa-00380921-2026-04.pdf"
+    assert links[0].url == target
+
+
+def test_finds_litoral_gas_invoice_behind_tracking_link() -> None:
+    import json
+    from urllib.parse import quote
+
+    target = "https://litoral.ecofactura.com.ar/FD/?p=invoice-reference"
+    payload = base64.b64encode(
+        json.dumps({"linkUrl": target}).encode()
+    ).decode()
+    tracking = (
+        "https://relaytrk.digital.litoralgas.com.ar/Click/Track"
+        f"?p={quote(payload)}"
+    )
+
+    links = list(linked_pdfs(_html_message(f"<a href='{tracking}'>Descargala</a>")))
+
+    assert len(links) == 1
+    assert links[0].filename == "litoral-gas-invoice-reference.pdf"
+    assert links[0].url == target

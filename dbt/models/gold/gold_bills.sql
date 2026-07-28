@@ -17,11 +17,12 @@ select
     case
         when due_date_kind = 'installment'
             then coalesce(total_amount, first_due_amount + second_due_amount)
+        when due_date_kind = 'single' then first_due_amount
         when current_date <= first_due_date then first_due_amount
         else second_due_amount
     end as current_amount,
     case
-        when current_date > second_due_date then 'overdue'
+        when current_date > coalesce(second_due_date, first_due_date) then 'overdue'
         else 'pending'
     end as status
 from {{ ref('silver_invoices') }}

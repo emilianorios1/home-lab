@@ -20,5 +20,7 @@ from {{ ref('silver_documents') }}
 where parse_status = 'parsed'
   and extracted_data ->> 'document_type' in (
       'condominium_expense',
-      'electricity_bill'
+      'electricity_bill',
+      'water_bill',
+      'gas_bill'
   )

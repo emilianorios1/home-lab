@@ -42,7 +42,7 @@ models:
         data_tests:
           - accepted_values:
               arguments:
-                values: [alternative, installment]
+                values: [alternative, installment, single]
   - name: silver_invoice_due_dates
     columns:
       - name: invoice_id
