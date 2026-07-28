@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from decimal import Decimal
 from hashlib import sha256
+from io import BytesIO
 from pathlib import Path
 from uuid import UUID, uuid4
 
@@ -63,6 +64,10 @@ def file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def content_sha256(content: bytes) -> str:
+    return sha256(content).hexdigest()
+
+
 def read_csv(path: Path) -> pd.DataFrame:
     if not path.is_file():
         raise FileNotFoundError(path)
@@ -76,6 +81,26 @@ def read_csv(path: Path) -> pd.DataFrame:
     return dataframe
 
 
+def read_api_csv(content: bytes) -> pd.DataFrame:
+    """Read the configurable CSV returned by the Account Money Reports API."""
+    dataframe = pd.read_csv(
+        BytesIO(content),
+        sep=None,
+        engine="python",
+        dtype=str,
+        keep_default_na=False,
+    )
+    required = {"TRANSACTION_TYPE", "TRANSACTION_AMOUNT"}
+    if not required.issubset(dataframe.columns):
+        raise ValueError(
+            "Unexpected Mercado Pago API report columns. "
+            f"Required {sorted(required)}, got {list(dataframe.columns)}"
+        )
+    if not {"SETTLEMENT_DATE", "TRANSACTION_DATE"}.intersection(dataframe.columns):
+        raise ValueError("Mercado Pago API report has no transaction date column")
+    return dataframe
+
+
 def _argentine_decimal(series: pd.Series) -> pd.Series:
     normalized = (
         series.str.strip()
@@ -83,6 +108,17 @@ def _argentine_decimal(series: pd.Series) -> pd.Series:
         .str.replace(",", ".", regex=False)
     )
     return normalized.map(lambda value: Decimal(value) if value else None)
+
+
+def _api_decimal(value: str) -> Decimal | None:
+    value = value.strip()
+    if not value:
+        return None
+    if "," in value and "." in value:
+        value = value.replace(".", "").replace(",", ".")
+    elif "," in value:
+        value = value.replace(",", ".")
+    return Decimal(value)
 
 
 def transform(dataframe: pd.DataFrame) -> pd.DataFrame:
@@ -104,9 +140,66 @@ def transform(dataframe: pd.DataFrame) -> pd.DataFrame:
     return dataframe
 
 
-def process(path: Path) -> ImportResult:
-    dataframe = transform(read_csv(path))
-    source_filename = path.name
+def transform_api(dataframe: pd.DataFrame) -> pd.DataFrame:
+    transaction_dates = dataframe["TRANSACTION_DATE"].str.strip()
+    if "SETTLEMENT_DATE" in dataframe.columns:
+        settlement_dates = dataframe["SETTLEMENT_DATE"].str.strip()
+        release_dates = settlement_dates.where(
+            settlement_dates != "",
+            transaction_dates,
+        )
+    else:
+        release_dates = transaction_dates
+    transaction_amounts = dataframe["TRANSACTION_AMOUNT"].str.strip()
+    if "SETTLEMENT_NET_AMOUNT" in dataframe.columns:
+        settlement_amounts = dataframe["SETTLEMENT_NET_AMOUNT"].str.strip()
+        amounts = settlement_amounts.where(
+            settlement_amounts != "",
+            transaction_amounts,
+        )
+    else:
+        amounts = transaction_amounts
+    result = pd.DataFrame(
+        {
+            "release_date": pd.to_datetime(
+                release_dates,
+                errors="raise",
+                utc=True,
+            ).dt.date,
+            "transaction_type": dataframe["TRANSACTION_TYPE"]
+            .str.strip()
+            .replace("", None),
+            "transaction_net_amount": amounts.map(_api_decimal),
+            # The official report has no running-balance field.
+            "partial_balance": None,
+        }
+    )
+    source_id = dataframe.get("SOURCE_ID", pd.Series("", index=dataframe.index))
+    external_reference = dataframe.get(
+        "EXTERNAL_REFERENCE", pd.Series("", index=dataframe.index)
+    )
+    result["reference_id"] = source_id.str.strip().where(
+        source_id.str.strip() != "",
+        external_reference.str.strip(),
+    )
+    result["reference_id"] = result["reference_id"].replace("", None)
+    return result[
+        [
+            "release_date",
+            "transaction_type",
+            "reference_id",
+            "transaction_net_amount",
+            "partial_balance",
+        ]
+    ]
+
+
+def _load(
+    dataframe: pd.DataFrame,
+    *,
+    source_filename: str,
+    source_sha256: str,
+) -> ImportResult:
     batch_id = uuid4()
     engine = get_engine()
 
@@ -132,7 +225,7 @@ def process(path: Path) -> ImportResult:
             {
                 "id": batch_id,
                 "source_filename": source_filename,
-                "source_sha256": file_sha256(path),
+                "source_sha256": source_sha256,
                 "row_count": len(dataframe),
             },
         )
@@ -151,3 +244,19 @@ def process(path: Path) -> ImportResult:
             )
 
     return ImportResult(batch_id, source_filename, len(dataframe))
+
+
+def process(path: Path) -> ImportResult:
+    return _load(
+        transform(read_csv(path)),
+        source_filename=path.name,
+        source_sha256=file_sha256(path),
+    )
+
+
+def process_api_report(content: bytes, source_filename: str) -> ImportResult:
+    return _load(
+        transform_api(read_api_csv(content)),
+        source_filename=source_filename,
+        source_sha256=content_sha256(content),
+    )

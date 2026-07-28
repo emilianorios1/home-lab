@@ -9,8 +9,10 @@ from home_lab.mercadopago.importer import (
     CSV_COLUMNS,
     file_sha256,
     process,
+    read_api_csv,
     read_csv,
     transform,
+    transform_api,
 )
 
 
@@ -39,6 +41,37 @@ def test_file_sha256_is_stable(tmp_path: Path) -> None:
     path = tmp_path / "report.csv"
     path.write_text("report")
     assert file_sha256(path) == file_sha256(path)
+
+
+def test_transform_api_report_maps_official_columns() -> None:
+    content = (
+        b"EXTERNAL_REFERENCE;SOURCE_ID;TRANSACTION_TYPE;TRANSACTION_AMOUNT;"
+        b"TRANSACTION_DATE;SETTLEMENT_NET_AMOUNT;SETTLEMENT_DATE\n"
+        b"order-1;payment-1;SETTLEMENT;1234.50;"
+        b"2026-06-01T12:00:00Z;-1200.25;2026-06-02T03:00:00Z\n"
+    )
+    record = transform_api(read_api_csv(content)).iloc[0]
+    assert record["release_date"].isoformat() == "2026-06-02"
+    assert record["reference_id"] == "payment-1"
+    assert record["transaction_type"] == "SETTLEMENT"
+    assert str(record["transaction_net_amount"]) == "-1200.25"
+    assert record["partial_balance"] is None
+
+
+def test_transform_api_falls_back_to_external_reference() -> None:
+    dataframe = pd.DataFrame(
+        [
+            {
+                "EXTERNAL_REFERENCE": "transfer-1",
+                "TRANSACTION_TYPE": "WITHDRAWAL",
+                "TRANSACTION_AMOUNT": "-10,50",
+                "TRANSACTION_DATE": "2026-06-01T03:00:00Z",
+            }
+        ]
+    )
+    record = transform_api(dataframe).iloc[0]
+    assert record["reference_id"] == "transfer-1"
+    assert str(record["transaction_net_amount"]) == "-10.50"
 
 
 def test_import_replaces_a_batch_with_the_same_filename(tmp_path: Path) -> None:
