@@ -17,7 +17,7 @@ models:
       - name: document_id
         data_tests: [not_null, unique]
       - name: sha256
-        data_tests: [not_null]
+        data_tests: [not_null, unique]
       - name: parse_status
         data_tests:
           - accepted_values:

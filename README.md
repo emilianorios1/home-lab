@@ -276,6 +276,9 @@ docker compose up -d --build dashboard
 
 Abrí [http://localhost:8501](http://localhost:8501). El dashboard ofrece:
 
+- resumen mensual de los gastos compartidos con Vitoria;
+- cálculo del alquiler neto descontando expensas extraordinarias;
+- conciliación entre facturas y pagos de Mercado Pago;
 - resumen y movimientos financieros;
 - documentos y facturas;
 - vencimientos e importes;

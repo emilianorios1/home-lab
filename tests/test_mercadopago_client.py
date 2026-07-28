@@ -86,3 +86,4 @@ def test_configure_report_updates_an_existing_configuration() -> None:
     assert [call[0] for call in calls] == ["GET", "PUT"]
     assert result["header_language"] == "en"
     assert {"key": "TRANSACTION_TYPE"} in result["columns"]
+    assert {"key": "DESCRIPTION"} in result["columns"]

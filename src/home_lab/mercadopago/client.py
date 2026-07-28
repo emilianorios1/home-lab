@@ -114,6 +114,7 @@ class MercadoPagoClient:
                 {"key": "SOURCE_ID"},
                 {"key": "EXTERNAL_REFERENCE"},
                 {"key": "TRANSACTION_TYPE"},
+                {"key": "DESCRIPTION"},
                 {"key": "TRANSACTION_AMOUNT"},
                 {"key": "SETTLEMENT_NET_AMOUNT"},
             ],
