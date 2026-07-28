@@ -265,6 +265,10 @@ Una factura es una obligación y no un movimiento realizado. Gold conserva esa
 separación y genera candidatos de conciliación cuando coinciden el importe y una
 ventana razonable alrededor del vencimiento.
 
+Los comprobantes históricos que ya no estén disponibles en su fuente pueden
+registrarse localmente en `bronze.manual_shared_expenses`. Sus valores permanecen
+en PostgreSQL y no se versionan en Git.
+
 ## Dashboard
 
 Construí Gold y levantá la aplicación:

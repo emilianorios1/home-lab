@@ -115,10 +115,35 @@ def create_schema(engine: Engine) -> None:
             UNIQUE (attachment_id, parser_name, parser_version)
         )
         """,
+        """
+        CREATE TABLE IF NOT EXISTS bronze.manual_shared_expenses (
+            id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+            summary_month DATE NOT NULL,
+            category TEXT NOT NULL CHECK (
+                category IN ('Expensas', 'Luz', 'Agua', 'Gas', 'TGI')
+            ),
+            issuer TEXT NOT NULL,
+            due_date DATE,
+            expected_amount NUMERIC(18, 2) NOT NULL
+                CHECK (expected_amount >= 0),
+            payment_date DATE,
+            paid_amount NUMERIC(18, 2)
+                CHECK (paid_amount IS NULL OR paid_amount >= 0),
+            payment_status TEXT NOT NULL
+                CHECK (payment_status IN ('pending', 'paid')),
+            source TEXT NOT NULL,
+            source_reference TEXT,
+            notes TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            UNIQUE (summary_month, category, issuer)
+        )
+        """,
         "CREATE INDEX IF NOT EXISTS mercadopago_account_statements_batch_id_idx ON raw.mercadopago_account_statements(batch_id)",
         "CREATE INDEX IF NOT EXISTS bronze_mercadopago_batch_id_idx ON bronze.mercadopago_account_statements(batch_id)",
         "CREATE INDEX IF NOT EXISTS gmail_attachments_sha256_idx ON bronze.gmail_attachments(sha256)",
         "CREATE INDEX IF NOT EXISTS document_parse_status_idx ON bronze.document_parse_results(status)",
+        "CREATE INDEX IF NOT EXISTS manual_shared_expenses_month_idx ON bronze.manual_shared_expenses(summary_month)",
         """
         INSERT INTO bronze.import_batches
             (id, source_filename, source_sha256, imported_at, row_count)
