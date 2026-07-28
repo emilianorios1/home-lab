@@ -214,7 +214,7 @@ def shared_expense_months(engine: Engine) -> list[date]:
 
 
 def monthly_shared_expenses(engine: Engine, month: date) -> dict[str, object]:
-    """Build the spreadsheet-style monthly household expense summary."""
+    """Build a monthly household-expense summary and its reconciliation detail."""
     with engine.connect() as connection:
         bill_rows = connection.execute(
             text(
@@ -224,7 +224,10 @@ def monthly_shared_expenses(engine: Engine, month: date) -> dict[str, object]:
                     sum(expected_amount) AS expected_amount,
                     sum(coalesce(paid_amount, 0)) AS paid_amount,
                     count(*) AS bill_count,
-                    count(*) FILTER (WHERE payment_status = 'paid') AS paid_count
+                    count(*) FILTER (WHERE payment_status = 'paid') AS paid_count,
+                    min(due_date) AS due_date,
+                    min(payment_date) AS payment_date,
+                    string_agg(DISTINCT issuer, ', ' ORDER BY issuer) AS issuer
                 FROM gold.shared_expense_items
                 WHERE summary_month = :month
                 GROUP BY category
@@ -261,10 +264,12 @@ def monthly_shared_expenses(engine: Engine, month: date) -> dict[str, object]:
     extraordinary = Decimal(extraordinary)
     gross_rent = rent_net + extraordinary
 
-    def bill_values(category: str) -> tuple[Decimal, Decimal, str]:
+    def bill_values(
+        category: str,
+    ) -> tuple[Decimal, Decimal, str, date | None, date | None, str | None]:
         bill = bills.get(category)
         if bill is None:
-            return Decimal("0"), Decimal("0"), "Sin factura"
+            return Decimal("0"), Decimal("0"), "Sin factura", None, None, None
         expected = Decimal(bill.expected_amount)
         paid = Decimal(bill.paid_amount)
         if bill.paid_count == bill.bill_count:
@@ -273,7 +278,7 @@ def monthly_shared_expenses(engine: Engine, month: date) -> dict[str, object]:
             status = "Parcial"
         else:
             status = "Pendiente"
-        return expected, paid, status
+        return expected, paid, status, bill.due_date, bill.payment_date, bill.issuer
 
     rows: list[dict[str, object]] = [
         {
@@ -289,6 +294,7 @@ def monthly_shared_expenses(engine: Engine, month: date) -> dict[str, object]:
             "status": "Descontado" if extraordinary else "Sin factura",
         },
     ]
+    services: list[dict[str, object]] = []
     expected_bills = Decimal("0")
     paid_bills = Decimal("0")
     for category, label in (
@@ -298,9 +304,22 @@ def monthly_shared_expenses(engine: Engine, month: date) -> dict[str, object]:
         ("Gas", "Gas"),
         ("TGI", "TGI"),
     ):
-        expected, paid, status = bill_values(category)
+        expected, paid, status, due_date, payment_date, issuer = bill_values(category)
         expected_bills += expected
         paid_bills += paid
+        services.append(
+            {
+                "category": category,
+                "concept": label,
+                "issuer": issuer,
+                "due_date": due_date,
+                "amount": expected,
+                "paid_amount": paid,
+                "pending_amount": max(expected - paid, Decimal("0")),
+                "payment_date": payment_date,
+                "status": status,
+            }
+        )
         row = {
             "concept": label,
             "amount": expected,
@@ -320,13 +339,27 @@ def monthly_shared_expenses(engine: Engine, month: date) -> dict[str, object]:
 
     shared_total = rent_net + expected_bills
     paid_total = rent_net + paid_bills
+    pending_total = max(shared_total - paid_total, Decimal("0"))
+    payment_progress = (
+        min(paid_total / shared_total, Decimal("1"))
+        if shared_total
+        else Decimal("0")
+    )
     return {
         "month": month,
         "rows": pd.DataFrame(rows),
+        "services": pd.DataFrame(services),
+        "rent": {
+            "gross": gross_rent,
+            "extraordinary": extraordinary,
+            "net": rent_net,
+        },
         "shared_total": shared_total,
         "per_person": (shared_total / Decimal("2")).quantize(
             Decimal("0.01"),
             rounding=ROUND_HALF_UP,
         ),
         "paid_total": paid_total,
+        "pending_total": pending_total,
+        "payment_progress": payment_progress,
     }
