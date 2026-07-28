@@ -269,6 +269,50 @@ Los comprobantes históricos que ya no estén disponibles en su fuente pueden
 registrarse localmente en `bronze.manual_shared_expenses`. Sus valores permanecen
 en PostgreSQL y no se versionan en Git.
 
+## Gastos compartidos
+
+El resumen mensual reúne las obligaciones del hogar y los movimientos usados para
+pagarlas. Las facturas de Expensas, Luz, Agua, Gas y TGI entran en el mes de su
+vencimiento; el alquiler entra en el mes en que aparece el movimiento categorizado
+como `Alquiler` en Mercado Pago.
+
+El cálculo conserva separadas las obligaciones y los pagos:
+
+```text
+alquiler bruto - expensas extraordinarias = alquiler efectivo
+alquiler efectivo + facturas del mes      = total del hogar
+total del hogar / 2                       = parte de cada persona
+total del hogar - pagos conciliados       = pendiente
+```
+
+Las expensas extraordinarias se muestran para explicar el descuento aplicado al
+alquiler, pero no se suman nuevamente al total. `Parte de cada persona` representa
+una división en partes iguales; todavía no descuenta transferencias entre Emiliano
+y Vitoria ni determina quién le debe a quién.
+
+Cada servicio puede tener uno de estos estados:
+
+- **Pagado**: todas sus facturas del mes tienen un movimiento conciliado;
+- **Parcial**: sólo una parte de las facturas o cuotas está conciliada;
+- **Pendiente**: existe la factura, pero todavía no se encontró el pago;
+- **Sin factura**: aún no se importó una obligación para ese servicio y mes.
+
+La conciliación usa las facturas importadas desde Gmail o SIAT y busca pagos
+compatibles en los movimientos de Mercado Pago. Los períodos históricos que ya no
+puedan descargarse pueden cargarse en `bronze.manual_shared_expenses`; participan
+del mismo resumen sin guardar importes personales en el repositorio.
+
+En la pantalla **Gastos compartidos** se puede:
+
+- elegir el mes y ver el total, la parte de cada persona y el progreso de pago;
+- revisar el cálculo separado del alquiler;
+- identificar rápidamente servicios pendientes y sus vencimientos;
+- copiar un resumen para compartir por WhatsApp;
+- desplegar el detalle de facturas y conciliaciones.
+
+Los PDFs originales se conservan en el almacenamiento documental. Se pueden buscar
+y descargar desde **Documentos y facturas**.
+
 ## Dashboard
 
 Construí Gold y levantá la aplicación:
@@ -278,7 +322,8 @@ Construí Gold y levantá la aplicación:
 docker compose up -d --build dashboard
 ```
 
-Abrí [http://localhost:8501](http://localhost:8501). El dashboard ofrece:
+Abrí [http://localhost:8501](http://localhost:8501). Desde otro dispositivo de la
+misma red local, usá `http://<ip-local-de-la-pc>:8501`. El dashboard ofrece:
 
 - resumen mensual de los gastos compartidos con Vitoria;
 - cálculo del alquiler neto descontando expensas extraordinarias;
