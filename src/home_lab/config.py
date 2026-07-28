@@ -40,7 +40,8 @@ def gmail_query() -> str:
         "{from:no_reply@zetace.com.ar "
         "from:oficinavirtual@epe.santafe.gov.ar "
         "from:facturadigital@aguassantafesinas.com "
-        "from:factura@digital.litoralgas.com.ar} newer_than:30d",
+        "from:factura@digital.litoralgas.com.ar "
+        "from:avisos@info.naranjax.com} newer_than:45d",
     )
 
 

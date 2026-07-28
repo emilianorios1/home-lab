@@ -23,6 +23,9 @@ select
     i.second_due_date,
     i.second_due_amount,
     i.due_date_kind,
-    i.total_amount
+    i.total_amount,
+    i.foreign_total_amount,
+    i.foreign_currency,
+    i.minimum_payment
 from {{ ref('silver_documents') }} d
 left join {{ ref('silver_invoices') }} i using (document_id)

@@ -14,6 +14,9 @@ select
     second_due_amount,
     due_date_kind,
     total_amount,
+    foreign_total_amount,
+    foreign_currency,
+    minimum_payment,
     case
         when due_date_kind = 'installment'
             then coalesce(total_amount, first_due_amount + second_due_amount)

@@ -41,6 +41,7 @@ navigation = st.navigation(
         ),
         st.Page("pages/overview.py", title="Flujo general", icon="📊"),
         st.Page("pages/movements.py", title="Movimientos", icon="🧾"),
+        st.Page("pages/credit_cards.py", title="Tarjeta Naranja", icon="💳"),
         st.Page("pages/documents.py", title="Documentos", icon="📄"),
     ]
 )
