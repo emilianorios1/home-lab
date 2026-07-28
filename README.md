@@ -136,10 +136,10 @@ El token se guarda en `secrets/gmail_token.json` con permisos restringidos. No s
 almacena la contraseña de Gmail.
 
 El filtro predeterminado se configura en `.env`. Incluye adjuntos PDF de Zeta y
-facturas de EPE enlazadas desde el botón `ver factura`:
+facturas enlazadas de EPE, Aguas Santafesinas y Litoral Gas:
 
 ```dotenv
-GMAIL_QUERY={from:no_reply@zetace.com.ar from:oficinavirtual@epe.santafe.gov.ar} newer_than:30d
+GMAIL_QUERY={from:no_reply@zetace.com.ar from:oficinavirtual@epe.santafe.gov.ar from:facturadigital@aguassantafesinas.com from:factura@digital.litoralgas.com.ar} newer_than:30d
 ```
 
 Para ejecutar el flujo completo:
@@ -186,6 +186,14 @@ firma PDF y aplica el mismo límite de tamaño que a un adjunto. El parser
 `epe_electricity_bill` extrae cliente, domicilio del suministro, emisión, consumo,
 total y las dos cuotas con sus vencimientos. Las cuotas se publican como
 vencimientos independientes para permitir su conciliación con movimientos.
+
+## Facturas de ASSA y Litoral Gas
+
+El flujo reconoce los botones de descarga enviados por Aguas Santafesinas y
+Litoral Gas, decodifica localmente sus enlaces de seguimiento y sólo descarga
+desde los endpoints de facturación permitidos. El parser de ASSA publica las dos
+cuotas de la factura de agua; el de Litoral Gas publica su vencimiento único.
+Ambos extraen cliente, período, emisión, domicilio, consumo e importe.
 
 Para probar o recuperar un PDF local:
 

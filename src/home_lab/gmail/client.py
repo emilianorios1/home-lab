@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import json
 from collections.abc import Iterator
 from dataclasses import dataclass
 from email.message import Message
@@ -19,6 +20,12 @@ EPE_INVOICE_HOSTS = {"epe.santafe.gov.ar", "www.epe.santafe.gov.ar"}
 EPE_INVOICE_PATH = (
     "/comercial/facturacion/facturas/generar_facturacorreo.php"
 )
+ASSA_TRACKING_HOST = "relaytrk.aguassantafesinas.com"
+ASSA_INVOICE_HOST = "assa.facturadospuntocero.com"
+ASSA_INVOICE_PATH = "/download-comprobante.php"
+LITORAL_TRACKING_HOST = "relaytrk.digital.litoralgas.com.ar"
+LITORAL_INVOICE_HOST = "litoral.ecofactura.com.ar"
+LITORAL_INVOICE_PATH = "/FD/"
 
 
 @dataclass(frozen=True)
@@ -143,8 +150,50 @@ def _decode_body(part: dict[str, Any]) -> str:
         return content.decode("latin-1")
 
 
+def _tracking_target(url: str) -> str | None:
+    """Decode provider-owned click tracking without requesting the tracker."""
+    parsed = urlparse(url)
+    host = (parsed.hostname or "").lower()
+    if host not in {ASSA_TRACKING_HOST, LITORAL_TRACKING_HOST}:
+        return None
+    encoded = parse_qs(parsed.query).get("p", [None])[0]
+    if not encoded:
+        return None
+    try:
+        padded = encoded + "=" * (-len(encoded) % 4)
+        payload = json.loads(base64.b64decode(padded).decode("utf-8"))
+    except (ValueError, UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    target = payload.get("linkUrl")
+    return target if isinstance(target, str) else None
+
+
+def _invoice_kind(url: str) -> str | None:
+    parsed = urlparse(url)
+    host = (parsed.hostname or "").lower()
+    if (
+        parsed.scheme in {"http", "https"}
+        and host in EPE_INVOICE_HOSTS
+        and parsed.path == EPE_INVOICE_PATH
+    ):
+        return "epe"
+    if (
+        parsed.scheme == "https"
+        and host == ASSA_INVOICE_HOST
+        and parsed.path == ASSA_INVOICE_PATH
+    ):
+        return "assa"
+    if (
+        parsed.scheme == "https"
+        and host == LITORAL_INVOICE_HOST
+        and parsed.path == LITORAL_INVOICE_PATH
+    ):
+        return "litoral-gas"
+    return None
+
+
 def linked_pdfs(message: dict[str, Any]) -> Iterator[LinkedPdf]:
-    """Find allow-listed EPE invoice links embedded in a Gmail HTML body."""
+    """Find allow-listed utility invoice links embedded in a Gmail HTML body."""
     payload = message.get("payload", {})
     for part in [payload, *iter_parts(payload)]:
         if part.get("mimeType", "").lower() != "text/html":
@@ -152,36 +201,41 @@ def linked_pdfs(message: dict[str, Any]) -> Iterator[LinkedPdf]:
         parser = _LinkParser()
         parser.feed(_decode_body(part))
         for url in parser.links:
-            parsed = urlparse(url)
-            if (
-                parsed.scheme not in {"http", "https"}
-                or (parsed.hostname or "").lower() not in EPE_INVOICE_HOSTS
-                or parsed.path != EPE_INVOICE_PATH
-            ):
+            target = _tracking_target(url) or url
+            kind = _invoice_kind(target)
+            if kind is None:
                 continue
+            parsed = urlparse(target)
             query = parse_qs(parsed.query)
-            customer = query.get("numerodecliente", ["unknown"])[0]
-            year = query.get("anio", ["unknown"])[0]
-            period = query.get("mes", ["unknown"])[0]
-            digest = sha256(url.encode("utf-8")).hexdigest()
+            if kind == "epe":
+                customer = query.get("numerodecliente", ["unknown"])[0]
+                year = query.get("anio", ["unknown"])[0]
+                period = query.get("mes", ["unknown"])[0]
+                filename = f"epe-{customer}-{year}-{period}.pdf"
+            elif kind == "assa":
+                customer = query.get("uf", ["unknown"])[0]
+                period = query.get("periodo", ["unknown"])[0]
+                filename = f"assa-{customer}-{period}.pdf"
+            else:
+                reference = query.get("p", ["unknown"])[0]
+                filename = f"litoral-gas-{reference}.pdf"
+            digest = sha256(target.encode("utf-8")).hexdigest()
             yield LinkedPdf(
                 attachment_id=f"linked:{digest}",
-                filename=f"epe-{customer}-{year}-{period}.pdf",
-                url=url,
+                filename=filename,
+                url=target,
             )
 
 
 def download_linked_pdf(url: str, max_bytes: int) -> bytes:
-    """Download an EPE PDF while enforcing the document size and host allow-list."""
+    """Download an allow-listed invoice PDF with redirect and size checks."""
+    expected_kind = _invoice_kind(url)
+    if expected_kind is None:
+        raise ValueError("Linked PDF URL is not an allow-listed invoice endpoint")
     request = Request(url, headers={"User-Agent": "home-lab/0.1"})
     with urlopen(request, timeout=30) as response:
-        final = urlparse(response.geturl())
-        if (
-            final.scheme != "https"
-            or (final.hostname or "").lower() not in EPE_INVOICE_HOSTS
-            or final.path != EPE_INVOICE_PATH
-        ):
-            raise ValueError("Linked PDF redirected outside the EPE invoice endpoint")
+        if _invoice_kind(response.geturl()) != expected_kind:
+            raise ValueError("Linked PDF redirected outside its invoice endpoint")
         declared_size = int(response.headers.get("Content-Length") or 0)
         if declared_size > max_bytes:
             raise ValueError(
@@ -193,7 +247,7 @@ def download_linked_pdf(url: str, max_bytes: int) -> bytes:
             f"Linked PDF exceeds DOCUMENT_MAX_BYTES: {len(content)} bytes"
         )
     if not content.startswith(b"%PDF-"):
-        raise ValueError("EPE invoice link did not return a valid PDF")
+        raise ValueError("Invoice link did not return a valid PDF")
     return content
 
 

@@ -6,6 +6,8 @@ select
     first_due_date as due_date,
     first_due_amount as amount
 from {{ ref('silver_invoices') }}
+where first_due_date is not null
+  and first_due_amount is not null
 
 union all
 
@@ -15,3 +17,5 @@ select
     second_due_date as due_date,
     second_due_amount as amount
 from {{ ref('silver_invoices') }}
+where second_due_date is not null
+  and second_due_amount is not null
