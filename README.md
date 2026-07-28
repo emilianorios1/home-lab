@@ -6,7 +6,7 @@ Gmail. Usa PostgreSQL, dbt y Streamlit con una arquitectura medallion.
 ## Arquitectura
 
 ```text
-Mercado Pago CSV ───────────────┐
+Mercado Pago Reports API ───────┐
                                ▼
 Gmail API ──► PDF/metadata ──► Bronze ──► parser PDF ──► Silver ──► Gold
                                                           │          │
@@ -40,16 +40,80 @@ python3 -m venv .venv
 
 Los datos financieros, documentos y secretos están excluidos de Git.
 
-## Importación de Mercado Pago
+## Configurar Mercado Pago
+
+La integración usa la API oficial de reportes de **Todas las transacciones**. No
+consulta solamente ventas: el reporte incluye las operaciones aprobadas que
+afectaron el dinero de la cuenta. Mercado Pago genera el reporte de manera
+asíncrona; `home-lab` solicita el período, espera la tarea, descarga el resultado y
+lo importa sin intervención manual.
+
+### Obtener el Access Token
+
+1. Ingresá a [Tus integraciones de Mercado
+   Pago](https://www.mercadopago.com.ar/developers/panel/app) con la misma cuenta
+   cuyos movimientos querés importar.
+2. Creá una aplicación (por ejemplo, `home-lab`) o abrí una existente.
+3. Entrá en **Producción > Credenciales de producción**. Si todavía no están
+   activas, Mercado Pago solicitará rubro, sitio web, aceptación de términos y
+   reCAPTCHA.
+4. Copiá únicamente el **Access Token** de producción, que comienza normalmente
+   con `APP_USR-`. No hace falta usar la Public Key, Client ID ni Client Secret.
+5. Guardalo en el `.env` local, que está excluido de Git:
+
+   ```dotenv
+   MERCADOPAGO_ACCESS_TOKEN=APP_USR-tu-token-real
+   ```
+
+El token es una clave privada con acceso a información de la cuenta: no debe
+pegarse en el código, el README, una captura ni un commit. Puede renovarse desde el
+mismo panel si alguna vez queda expuesto.
+
+La primera vez, configurá las columnas estables que necesita el importador:
+
+```bash
+.venv/bin/home-lab configure-mercadopago
+```
+
+Este comando crea o actualiza la configuración compartida del reporte en Mercado
+Pago (columnas, separador, idioma y zona horaria); no activa una programación en
+los servidores de Mercado Pago.
+
+### Sincronizar movimientos
+
+Para importar un período y reconstruir Silver/Gold:
+
+```bash
+.venv/bin/home-lab sync-mercadopago --from 2026-07-01 --to 2026-07-26
+```
+
+Sin fechas importa el día anterior, que es el modo recomendado para cron:
+
+```bash
+scripts/sync-mercadopago.sh
+```
+
+Ejemplo diario a las 06:30:
+
+```cron
+30 6 * * * /home/emiliano/home-lab/scripts/sync-mercadopago.sh >> /home/emiliano/home-lab/data/mercadopago-sync.log 2>&1
+```
+
+Repetir exactamente el mismo período reemplaza su lote anterior. Para un backfill,
+usá períodos sin superposición para no cargar dos veces los mismos movimientos.
+El formato oficial no incluye el saldo acumulado de cada fila, por lo que
+`running_balance` queda vacío para registros obtenidos por API; ingresos, egresos,
+flujo neto, categorías y conciliación siguen disponibles.
+
+La importación manual anterior queda como herramienta de recuperación:
 
 ```bash
 .venv/bin/home-lab import-account-statement data/raw/account_statement.csv
 .venv/bin/home-lab transform
 ```
 
-Las importaciones nuevas se escriben en `bronze`. Al inicializar una instalación
-existente, los lotes previos del esquema legado `raw` se copian sin eliminar el
-origen.
+Las importaciones se escriben en `bronze`. Al inicializar una instalación existente,
+los lotes previos del esquema legado `raw` se copian sin eliminar el origen.
 
 ## Configurar Gmail
 
@@ -200,7 +264,9 @@ src/home_lab/
 │   ├── repository.py
 │   └── pipeline.py
 ├── mercadopago/
-│   └── importer.py
+│   ├── client.py
+│   ├── importer.py
+│   └── pipeline.py
 ├── documents/
 │   ├── pdf.py
 │   ├── storage.py
@@ -208,6 +274,6 @@ src/home_lab/
 └── dashboard/
 ```
 
-Mercado Pago conserva dentro de su propio módulo toda la lectura y carga CSV. Gmail
-separa llamadas externas, persistencia Bronze y orquestación, evitando paquetes
-genéricos como `core` o `integrations`.
+Mercado Pago separa el cliente HTTP, la transformación/carga y la orquestación.
+Gmail aplica la misma separación para llamadas externas, persistencia Bronze y
+pipeline, evitando paquetes genéricos como `core` o `integrations`.

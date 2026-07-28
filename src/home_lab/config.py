@@ -41,6 +41,14 @@ def gmail_query() -> str:
     )
 
 
+def mercadopago_access_token() -> str:
+    load_dotenv()
+    value = os.getenv("MERCADOPAGO_ACCESS_TOKEN")
+    if not value:
+        raise RuntimeError("MERCADOPAGO_ACCESS_TOKEN must be set in .env")
+    return value
+
+
 def document_max_bytes() -> int:
     load_dotenv()
     value = int(os.getenv("DOCUMENT_MAX_BYTES", str(20 * 1024 * 1024)))

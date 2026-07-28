@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import argparse
 import logging
+from datetime import date, datetime, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from home_lab.database import create_schema, get_engine
 from home_lab.gmail.pipeline import (
@@ -15,9 +17,21 @@ from home_lab.gmail.pipeline import (
 )
 from home_lab.logging import configure_logging
 from home_lab.mercadopago.importer import process
+from home_lab.mercadopago.pipeline import (
+    configure_account_reports,
+    sync_account_activity,
+)
 
 
 DBT_PROJECT_DIR = Path(__file__).resolve().parents[2] / "dbt"
+ARGENTINA_TIMEZONE = ZoneInfo("America/Argentina/Buenos_Aires")
+
+
+def iso_date(value: str) -> date:
+    try:
+        return date.fromisoformat(value)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError("expected YYYY-MM-DD") from error
 
 
 def run_transform() -> bool:
@@ -70,6 +84,32 @@ def build_parser() -> argparse.ArgumentParser:
         "import-account-statement", help="Import one Mercado Pago account statement CSV"
     )
     import_parser.add_argument("csv_path", type=Path, help="Path to the CSV file")
+    mercadopago_parser = subparsers.add_parser(
+        "sync-mercadopago",
+        help="Download account activity from Mercado Pago's official API",
+    )
+    mercadopago_parser.add_argument(
+        "--from",
+        dest="start_date",
+        type=iso_date,
+        help="First date to import (YYYY-MM-DD); defaults to yesterday",
+    )
+    mercadopago_parser.add_argument(
+        "--to",
+        dest="end_date",
+        type=iso_date,
+        help="Last date to import, inclusive (YYYY-MM-DD); defaults to --from",
+    )
+    mercadopago_parser.add_argument(
+        "--wait-seconds",
+        type=float,
+        default=300,
+        help="Maximum time to wait for report generation (default: 300)",
+    )
+    subparsers.add_parser(
+        "configure-mercadopago",
+        help="Create/update the API report format required by home-lab",
+    )
     return parser
 
 
@@ -143,6 +183,42 @@ def main() -> int:
             result.row_count,
             result.source_filename,
             result.batch_id,
+        )
+        return 0
+
+    if args.command == "sync-mercadopago":
+        yesterday = datetime.now(ARGENTINA_TIMEZONE).date() - timedelta(days=1)
+        start = args.start_date or yesterday
+        end = args.end_date or start
+        if end < start:
+            logging.error("--to cannot be before --from")
+            return 2
+        if args.wait_seconds <= 0:
+            logging.error("--wait-seconds must be positive")
+            return 2
+        result = sync_account_activity(
+            start,
+            end,
+            wait_seconds=args.wait_seconds,
+        )
+        if not run_transform():
+            logging.error("Mercado Pago imported, but dbt transformation failed")
+            return 1
+        logging.info(
+            "Mercado Pago sync complete: task=%s report=%s rows=%s batch=%s",
+            result.task_id,
+            result.api_file_name,
+            result.imported.row_count,
+            result.imported.batch_id,
+        )
+        return 0
+
+    if args.command == "configure-mercadopago":
+        configuration = configure_account_reports()
+        logging.info(
+            "Mercado Pago report configuration ready: prefix=%s columns=%s",
+            configuration.get("file_name_prefix"),
+            len(configuration.get("columns", [])),
         )
         return 0
 
