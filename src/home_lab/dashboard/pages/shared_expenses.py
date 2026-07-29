@@ -8,12 +8,14 @@ from decimal import Decimal
 import pandas as pd
 import streamlit as st
 
+from home_lab.config import document_store_path
 from home_lab.dashboard.queries import (
     monthly_shared_expenses,
     shared_expense_months,
 )
 from home_lab.dashboard.rents import save_monthly_rent
 from home_lab.database import get_engine
+from home_lab.documents.storage import resolve_document_path
 
 
 MONTH_NAMES = (
@@ -45,6 +47,27 @@ def date_label(value: object) -> str:
     if value is None or pd.isna(value):
         return "Sin fecha"
     return value.strftime("%d/%m/%Y")
+
+
+def document_downloads(documents: list[dict[str, object]], key: str) -> None:
+    for document in documents:
+        try:
+            path = resolve_document_path(
+                document_store_path(),
+                str(document["storage_path"]),
+            )
+            st.download_button(
+                "Descargar PDF",
+                data=path.read_bytes(),
+                file_name=str(document["original_filename"]),
+                mime="application/pdf",
+                key=f"{key}_{document['document_id']}",
+            )
+        except (OSError, ValueError) as error:
+            st.warning(
+                "El archivo no está disponible en el almacenamiento local: "
+                f"{error}"
+            )
 
 
 SERVICE_ICONS = {
@@ -179,6 +202,10 @@ with st.container(border=True):
         "Las expensas totales se transfieren completas a Zetace y ese importe "
         "se divide entre ambos."
     )
+    document_downloads(
+        expenses["documents"],
+        f"{selected_month.isoformat()}_expenses",
+    )
 
 st.divider()
 st.subheader("Otros servicios")
@@ -222,6 +249,10 @@ for service in services_without_expenses.itertuples(index=False):
                 else ""
             )
             status.caption(f"Pago conciliado{payment_text}")
+        document_downloads(
+            service.documents,
+            f"{selected_month.isoformat()}_{service.category}",
+        )
 
 share_text = "\n".join(
     [

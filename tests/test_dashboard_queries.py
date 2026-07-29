@@ -2,6 +2,7 @@ from collections.abc import Iterator
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 from sqlalchemy import text
@@ -192,6 +193,7 @@ def test_monthly_shared_expenses_have_monthly_summary_shape() -> None:
         "TGI",
     ]
     assert list(services["category"]) == ["Expensas", "Luz", "Agua", "Gas", "TGI"]
+    assert "documents" in services
     assert summary["rent"]["gross"] == (
         summary["rent"]["net"] + summary["rent"]["extraordinary"]
     )
@@ -201,6 +203,89 @@ def test_monthly_shared_expenses_have_monthly_summary_shape() -> None:
     )
     assert 0 <= summary["payment_progress"] <= 1
     assert abs(summary["per_person"] - summary["shared_total"] / 2) <= 0.005
+
+
+def test_monthly_shared_expenses_include_source_documents() -> None:
+    engine = get_engine()
+    message_id = f"dashboard-document-{uuid4()}"
+    filename = "shared-expense.pdf"
+    storage_path = "synthetic/shared-expense.pdf"
+    with engine.begin() as connection:
+        document_id = connection.execute(
+            text(
+                """
+                WITH message AS (
+                    INSERT INTO bronze.gmail_messages (
+                        message_id, received_at, metadata_path
+                    )
+                    VALUES (:message_id, now(), 'synthetic/message.json')
+                    RETURNING message_id
+                ),
+                attachment AS (
+                    INSERT INTO bronze.gmail_attachments (
+                        message_id, attachment_id, original_filename, mime_type,
+                        byte_size, sha256, storage_path
+                    )
+                    SELECT
+                        message_id, 'attachment', :filename, 'application/pdf',
+                        1, :sha256, :storage_path
+                    FROM message
+                    RETURNING id
+                )
+                INSERT INTO bronze.document_parse_results (
+                    attachment_id, parser_name, parser_version, status,
+                    extracted_data
+                )
+                SELECT
+                    id, 'synthetic', '1', 'parsed',
+                    jsonb_build_object(
+                        'document_type', 'condominium_expense',
+                        'issuer', 'Synthetic',
+                        'first_due_date', '2098-01-10',
+                        'first_due_amount', '100.00',
+                        'due_date_kind', 'single'
+                    )
+                FROM attachment
+                RETURNING attachment_id
+                """
+            ),
+            {
+                "message_id": message_id,
+                "filename": filename,
+                "sha256": str(uuid4()),
+                "storage_path": storage_path,
+            },
+        ).scalar_one()
+
+    try:
+        services = monthly_shared_expenses(engine, date(2098, 1, 1))["services"]
+        expenses = services.loc[services["category"] == "Expensas"].iloc[0]
+        assert expenses["documents"] == [
+            {
+                "document_id": document_id,
+                "original_filename": filename,
+                "storage_path": storage_path,
+            }
+        ]
+    finally:
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    """
+                    WITH parse_result AS (
+                        DELETE FROM bronze.document_parse_results
+                        WHERE attachment_id = :document_id
+                    ),
+                    attachment AS (
+                        DELETE FROM bronze.gmail_attachments
+                        WHERE id = :document_id
+                    )
+                    DELETE FROM bronze.gmail_messages
+                    WHERE message_id = :message_id
+                    """
+                ),
+                {"document_id": document_id, "message_id": message_id},
+            )
 
 
 def test_manual_gross_rent_calculates_net_amount() -> None:
