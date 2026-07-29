@@ -135,6 +135,10 @@ profiles. It requires the configured local PostgreSQL instance.
 
 ## Git and worktree workflow
 
+- Prefer the authenticated GitHub CLI (`gh`) for pull requests, Actions checks
+  and logs, branch publication, and merges in this repository. Use a GitHub
+  connector only when `gh` does not cover the required operation or the user
+  explicitly requests the connector.
 - For every task that will create, edit, rename, or delete repository files, work
   in a dedicated Git worktree. Read-only inspection, diagnosis, explanation, and
   status checks do not require a new worktree.
