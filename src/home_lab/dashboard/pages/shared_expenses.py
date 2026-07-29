@@ -114,33 +114,6 @@ services = summary["services"].copy()
 rent = summary["rent"]
 expenses = services.loc[services["category"] == "Expensas"].iloc[0]
 
-with st.expander("✏️ Cargar alquiler bruto", expanded=not rent["configured"]):
-    st.caption(
-        "Ingresá el importe informado por la inmobiliaria. Las expensas "
-        "extraordinarias se descuentan automáticamente."
-    )
-    with st.form(f"rent_{selected_month.isoformat()}"):
-        gross_amount = st.number_input(
-            "Alquiler bruto",
-            min_value=0.01,
-            value=float(rent["gross"]) or 0.01,
-            step=1000.0,
-            format="%.2f",
-        )
-        submitted = st.form_submit_button("Guardar alquiler", type="primary")
-    if submitted:
-        saved_amount = save_monthly_rent(
-            engine,
-            selected_month,
-            Decimal(str(gross_amount)),
-        )
-        st.session_state["saved_rent"] = (selected_month, saved_amount)
-        st.rerun()
-
-saved_rent = st.session_state.pop("saved_rent", None)
-if saved_rent and saved_rent[0] == selected_month:
-    st.success(f"Alquiler bruto guardado: {ars(saved_rent[1])}.")
-
 st.subheader(f"Resumen de {month_label(selected_month).lower()}")
 share, total = st.columns([1.5, 1])
 share.metric("Parte total de cada uno", ars(summary["per_person"]))
@@ -308,3 +281,30 @@ with st.expander("Ver facturas y conciliaciones"):
         "Las conciliaciones se completan automáticamente cuando aparece un pago "
         "compatible en Mercado Pago."
     )
+
+with st.expander("✏️ Cargar alquiler bruto", expanded=not rent["configured"]):
+    st.caption(
+        "Ingresá el importe informado por la inmobiliaria. Las expensas "
+        "extraordinarias se descuentan automáticamente."
+    )
+    with st.form(f"rent_{selected_month.isoformat()}"):
+        gross_amount = st.number_input(
+            "Alquiler bruto",
+            min_value=0.01,
+            value=float(rent["gross"]) or 0.01,
+            step=1000.0,
+            format="%.2f",
+        )
+        submitted = st.form_submit_button("Guardar alquiler", type="primary")
+    if submitted:
+        saved_amount = save_monthly_rent(
+            engine,
+            selected_month,
+            Decimal(str(gross_amount)),
+        )
+        st.session_state["saved_rent"] = (selected_month, saved_amount)
+        st.rerun()
+
+saved_rent = st.session_state.pop("saved_rent", None)
+if saved_rent and saved_rent[0] == selected_month:
+    st.success(f"Alquiler bruto guardado: {ars(saved_rent[1])}.")
