@@ -19,6 +19,34 @@ sources:
           - name: batch_id
             data_tests:
               - not_null
+      - name: financial_statements
+        columns:
+          - name: id
+            data_tests: [not_null, unique]
+          - name: source_sha256
+            data_tests: [not_null]
+      - name: mercadopago_statement_movements
+        columns:
+          - name: id
+            data_tests: [not_null, unique]
+          - name: statement_id
+            data_tests:
+              - not_null
+              - relationships:
+                  arguments:
+                    to: source('bronze', 'financial_statements')
+                    field: id
+      - name: mercadopago_api_movements
+        columns:
+          - name: id
+            data_tests: [not_null, unique]
+          - name: batch_id
+            data_tests:
+              - not_null
+              - relationships:
+                  arguments:
+                    to: source('bronze', 'import_batches')
+                    field: id
       - name: gmail_messages
         columns:
           - name: message_id

@@ -25,6 +25,13 @@ def document_store_path() -> Path:
     return _path_setting("DOCUMENT_STORE_PATH", "data/bronze/gmail")
 
 
+def financial_statement_store_path() -> Path:
+    return _path_setting(
+        "FINANCIAL_STATEMENT_STORE_PATH",
+        "data/bronze/financial-statements",
+    )
+
+
 def gmail_client_secret_path() -> Path:
     return _path_setting("GMAIL_CLIENT_SECRET_PATH", "secrets/gmail_client_secret.json")
 

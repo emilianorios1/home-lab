@@ -2,19 +2,27 @@
 
 from __future__ import annotations
 
+import csv
+from calendar import monthrange
 from dataclasses import dataclass
+from datetime import date
 from decimal import Decimal
 from hashlib import sha256
 from io import BytesIO
 from pathlib import Path
 from uuid import UUID, uuid4
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 from sqlalchemy import Date, Numeric, Text, text
 from sqlalchemy.dialects.postgresql import UUID as PostgreSQLUUID
 
+from home_lab.config import financial_statement_store_path
 from home_lab.database import get_engine
+from home_lab.mercadopago.storage import store_statement
 
+
+ARGENTINA_TIMEZONE = ZoneInfo("America/Argentina/Buenos_Aires")
 
 CSV_COLUMNS = [
     "RELEASE_DATE",
@@ -39,8 +47,17 @@ COLUMN_NAMES = {
     "PARTIAL_BALANCE": "partial_balance",
 }
 
-COLUMN_TYPES = {
+API_COLUMN_TYPES = {
     "batch_id": PostgreSQLUUID(as_uuid=True),
+    "release_date": Date(),
+    "transaction_type": Text(),
+    "reference_id": Text(),
+    "transaction_net_amount": Numeric(18, 2),
+    "partial_balance": Numeric(18, 2),
+}
+
+STATEMENT_COLUMN_TYPES = {
+    "statement_id": PostgreSQLUUID(as_uuid=True),
     "release_date": Date(),
     "transaction_type": Text(),
     "reference_id": Text(),
@@ -54,6 +71,22 @@ class ImportResult:
     batch_id: UUID
     source_filename: str
     row_count: int
+
+
+@dataclass(frozen=True)
+class StatementImportResult:
+    statement_id: UUID
+    source_filename: str
+    row_count: int
+    storage_path: str
+
+
+@dataclass(frozen=True)
+class StatementSummary:
+    initial_balance: Decimal
+    credits: Decimal
+    debits: Decimal
+    final_balance: Decimal
 
 
 def file_sha256(path: Path) -> str:
@@ -79,6 +112,29 @@ def read_csv(path: Path) -> pd.DataFrame:
             f"Unexpected CSV columns. Expected {CSV_COLUMNS}, got {actual_columns}"
         )
     return dataframe
+
+
+def read_summary(path: Path) -> StatementSummary:
+    if not path.is_file():
+        raise FileNotFoundError(path)
+
+    with path.open(encoding="utf-8-sig", newline="") as source:
+        rows = csv.reader(source, delimiter=";")
+        try:
+            columns = next(rows)
+            values = next(rows)
+        except StopIteration as error:
+            raise ValueError("Account statement has no balance summary") from error
+
+    expected = ["INITIAL_BALANCE", "CREDITS", "DEBITS", "FINAL_BALANCE"]
+    if columns != expected or len(values) != len(expected):
+        raise ValueError(
+            f"Unexpected account statement summary. Expected {expected}, got {columns}"
+        )
+    parsed = [_argentine_value(value) for value in values]
+    if any(value is None for value in parsed):
+        raise ValueError("Account statement balance summary cannot contain empty values")
+    return StatementSummary(*parsed)  # type: ignore[arg-type]
 
 
 def read_api_csv(content: bytes) -> pd.DataFrame:
@@ -108,6 +164,11 @@ def _argentine_decimal(series: pd.Series) -> pd.Series:
         .str.replace(",", ".", regex=False)
     )
     return normalized.map(lambda value: Decimal(value) if value else None)
+
+
+def _argentine_value(value: str) -> Decimal | None:
+    normalized = value.strip().replace(".", "").replace(",", ".")
+    return Decimal(normalized) if normalized else None
 
 
 def _api_decimal(value: str) -> Decimal | None:
@@ -140,6 +201,56 @@ def transform(dataframe: pd.DataFrame) -> pd.DataFrame:
     return dataframe
 
 
+def statement_period(dataframe: pd.DataFrame) -> tuple[date, date]:
+    if dataframe.empty:
+        raise ValueError("Account statement has no movements")
+    first = dataframe["release_date"].min()
+    last = dataframe["release_date"].max()
+    if first.year == last.year and first.month == last.month:
+        return (
+            first.replace(day=1),
+            last.replace(day=monthrange(last.year, last.month)[1]),
+        )
+    return first, last
+
+
+def validate_statement(
+    dataframe: pd.DataFrame,
+    summary: StatementSummary,
+) -> None:
+    credits = sum(
+        (
+            value
+            for value in dataframe["transaction_net_amount"]
+            if value is not None and value > 0
+        ),
+        Decimal("0"),
+    )
+    debits = sum(
+        (
+            value
+            for value in dataframe["transaction_net_amount"]
+            if value is not None and value < 0
+        ),
+        Decimal("0"),
+    )
+    if credits != summary.credits or debits != summary.debits:
+        raise ValueError(
+            "Account statement movement totals do not match its balance summary"
+        )
+    if summary.initial_balance + credits + debits != summary.final_balance:
+        raise ValueError("Account statement opening and closing balances do not reconcile")
+
+    running_balance = summary.initial_balance
+    for line_number, row in enumerate(dataframe.itertuples(index=False), start=1):
+        running_balance += row.transaction_net_amount
+        if running_balance != row.partial_balance:
+            raise ValueError(
+                "Account statement running balance does not reconcile "
+                f"at movement line {line_number}"
+            )
+
+
 def transform_api(dataframe: pd.DataFrame) -> pd.DataFrame:
     transaction_dates = dataframe["TRANSACTION_DATE"].str.strip()
     if "SETTLEMENT_DATE" in dataframe.columns:
@@ -169,7 +280,9 @@ def transform_api(dataframe: pd.DataFrame) -> pd.DataFrame:
                 release_dates,
                 errors="raise",
                 utc=True,
-            ).dt.date,
+            )
+            .dt.tz_convert(ARGENTINA_TIMEZONE)
+            .dt.date,
             # DESCRIPTION is the human-readable operation detail needed for
             # household-expense categorization. Older configured reports did
             # not include it, so retain TRANSACTION_TYPE as a safe fallback.
@@ -202,7 +315,7 @@ def transform_api(dataframe: pd.DataFrame) -> pd.DataFrame:
     ]
 
 
-def _load(
+def _load_api(
     dataframe: pd.DataFrame,
     *,
     source_filename: str,
@@ -242,28 +355,120 @@ def _load(
         rows.insert(0, "batch_id", batch_id)
         if not rows.empty:
             rows.to_sql(
-                name="mercadopago_account_statements",
+                name="mercadopago_api_movements",
                 con=connection,
                 schema="bronze",
                 if_exists="append",
                 index=False,
                 chunksize=1_000,
-                dtype=COLUMN_TYPES,
+                dtype=API_COLUMN_TYPES,
             )
 
     return ImportResult(batch_id, source_filename, len(dataframe))
 
 
-def process(path: Path) -> ImportResult:
-    return _load(
-        transform(read_csv(path)),
-        source_filename=path.name,
-        source_sha256=file_sha256(path),
+def process(
+    path: Path,
+    *,
+    storage_root: Path | None = None,
+) -> StatementImportResult:
+    dataframe = transform(read_csv(path))
+    summary = read_summary(path)
+    validate_statement(dataframe, summary)
+    period_start, period_end = statement_period(dataframe)
+    content = path.read_bytes()
+    stored = store_statement(
+        storage_root or financial_statement_store_path(),
+        provider="mercadopago",
+        period_start=period_start,
+        content=content,
+        suffix=path.suffix or ".csv",
+    )
+    statement_id = uuid4()
+    engine = get_engine()
+
+    with engine.begin() as connection:
+        statement_id = connection.execute(
+            text(
+                """
+                INSERT INTO bronze.financial_statements (
+                    id, provider, account_key, statement_type,
+                    period_start, period_end, source_filename, source_format,
+                    source_sha256, storage_path, byte_size,
+                    initial_balance, credits, debits, final_balance, row_count
+                )
+                VALUES (
+                    :id, 'mercadopago', 'primary', 'account_statement',
+                    :period_start, :period_end, :source_filename, 'csv',
+                    :source_sha256, :storage_path, :byte_size,
+                    :initial_balance, :credits, :debits, :final_balance, :row_count
+                )
+                ON CONFLICT (
+                    provider, account_key, statement_type, period_start, period_end
+                )
+                DO UPDATE SET
+                    source_filename = excluded.source_filename,
+                    source_format = excluded.source_format,
+                    source_sha256 = excluded.source_sha256,
+                    storage_path = excluded.storage_path,
+                    byte_size = excluded.byte_size,
+                    initial_balance = excluded.initial_balance,
+                    credits = excluded.credits,
+                    debits = excluded.debits,
+                    final_balance = excluded.final_balance,
+                    row_count = excluded.row_count,
+                    imported_at = now()
+                RETURNING id
+                """
+            ),
+            {
+                "id": statement_id,
+                "period_start": period_start,
+                "period_end": period_end,
+                "source_filename": path.name,
+                "source_sha256": stored.sha256,
+                "storage_path": stored.relative_path,
+                "byte_size": stored.byte_size,
+                "initial_balance": summary.initial_balance,
+                "credits": summary.credits,
+                "debits": summary.debits,
+                "final_balance": summary.final_balance,
+                "row_count": len(dataframe),
+            },
+        ).scalar_one()
+
+        connection.execute(
+            text(
+                """
+                DELETE FROM bronze.mercadopago_statement_movements
+                WHERE statement_id = :statement_id
+                """
+            ),
+            {"statement_id": statement_id},
+        )
+        rows = dataframe.copy()
+        rows.insert(0, "line_number", range(1, len(rows) + 1))
+        rows.insert(0, "statement_id", statement_id)
+        rows.to_sql(
+            name="mercadopago_statement_movements",
+            con=connection,
+            schema="bronze",
+            if_exists="append",
+            index=False,
+            chunksize=1_000,
+            dtype=STATEMENT_COLUMN_TYPES,
+        )
+
+    return StatementImportResult(
+        statement_id,
+        path.name,
+        len(dataframe),
+        stored.relative_path,
     )
 
 
 def process_api_report(content: bytes, source_filename: str) -> ImportResult:
-    return _load(
+    return _load_api(
         transform_api(read_api_csv(content)),
         source_filename=source_filename,
         source_sha256=content_sha256(content),

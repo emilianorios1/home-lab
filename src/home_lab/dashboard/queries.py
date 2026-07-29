@@ -126,7 +126,8 @@ def movements(
                 category,
                 amount AS transaction_net_amount,
                 running_balance AS partial_balance,
-                source
+                source,
+                source_origin
             FROM gold.movements
             WHERE release_date BETWEEN :start_date AND :end_date
               AND (:search = '' OR description ILIKE :search_pattern)
