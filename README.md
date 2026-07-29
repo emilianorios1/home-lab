@@ -1,7 +1,8 @@
 # home-lab
 
-Plataforma local para integrar movimientos financieros y documentos recibidos por
-Gmail. Usa PostgreSQL, dbt y Streamlit con una arquitectura medallion.
+Plataforma local para importar actividad financiera y documentos del hogar,
+normalizarlos en PostgreSQL con dbt y consultarlos desde un dashboard Streamlit.
+Usa Python 3.12, PostgreSQL 17 y una arquitectura Bronze/Silver/Gold.
 
 ## Arquitectura
 
@@ -16,29 +17,55 @@ SIAT TGI ───► boleta PDF ────────┘
                                            Streamlit (consultas + carga manual)
 ```
 
-- **Bronze** conserva fuentes reproducibles: movimientos originales, mensajes,
-  adjuntos, texto extraído y resultados versionados del parser.
-- **Silver** normaliza movimientos, documentos, facturas, vencimientos y conceptos.
-- **Gold** disponibiliza movimientos, obligaciones, documentos y candidatos de
-  conciliación.
+- **Bronze** conserva fuentes reproducibles y la trazabilidad de cada ingesta.
+- **Silver** normaliza movimientos, documentos, facturas, vencimientos y
+  conceptos.
+- **Gold** publica movimientos, obligaciones, documentos y candidatos de
+  conciliación listos para consultar.
 
-Los PDF viven fuera de PostgreSQL en almacenamiento content-addressed. La base sólo
-guarda su ruta relativa, SHA-256, tamaño, tipo y trazabilidad. Un correo se deduplica
-por `message_id`, un adjunto por `message_id + attachment_id` y un documento por su
-hash.
+Los PDF viven fuera de PostgreSQL en almacenamiento content-addressed. La base
+sólo guarda su metadata y trazabilidad. Las ingestas son idempotentes y las
+escrituras del dashboard se limitan a interfaces explícitas de carga manual.
 
-## Entornos y puesta en marcha
+La explicación completa está en
+[`docs/architecture.md`](docs/architecture.md).
 
-El repositorio separa por completo desarrollo y producción. Para desarrollar:
+## Funcionalidades
+
+- Importación de movimientos mediante la API de reportes de Mercado Pago.
+- Importación y validación de resúmenes de cuenta de Mercado Pago.
+- Lectura de Gmail y descarga segura de documentos financieros.
+- Facturas de EPE, ASSA y Litoral Gas, expensas Zeta y resúmenes de Naranja X.
+- Descarga de boletas de TGI desde SIAT Rosario.
+- Normalización y validación del modelo mediante dbt.
+- Conciliación de obligaciones con pagos.
+- Resumen de gastos compartidos con carga manual del alquiler bruto.
+- Consulta de movimientos y documentos desde Streamlit.
+
+La configuración y los comandos propios de cada fuente están en
+[`docs/integrations.md`](docs/integrations.md).
+
+## Desarrollo local
+
+No sobrescribas un `.env` existente. Para preparar un checkout nuevo:
 
 ```bash
-cp .env.example .env
+test -f .env || cp .env.example .env
+docker compose up -d postgres
+python3 -m venv .venv
+.venv/bin/pip install -e '.[dev]'
+.venv/bin/home-lab init-db
+```
+
+También se puede levantar el entorno de desarrollo completo con:
+
+```bash
 scripts/dev-up.sh
 ```
 
-El dashboard de desarrollo queda en `http://localhost:8502` y su PostgreSQL en
-`127.0.0.1:5432`. Los datos financieros, documentos y secretos están excluidos de
-Git.
+El dashboard de desarrollo queda en `http://localhost:8502` y PostgreSQL en
+`127.0.0.1:5432`. Los datos financieros, documentos y secretos están excluidos
+de Git.
 
 Cada worktree puede levantar un entorno completamente aislado:
 
@@ -53,364 +80,58 @@ imagen, red, volumen PostgreSQL y directorio de datos separados del checkout
 principal y de los demás worktrees. La URL asignada al dashboard se muestra al
 terminar `dev-up.sh`.
 
-Para instalar en esta notebook una producción persistente, disponible en la red
-local y administrada por systemd:
+## Flujos habituales
 
 ```bash
-scripts/install-production.sh
-```
-
-Producción queda en el puerto `8501`, usa credenciales, red y volumen propios,
-realiza backups diarios y vuelve a arrancar con la notebook. Cada push a `main`
-pasa tests de Python y dbt, publica una imagen inmutable en GHCR y la despliega
-mediante un runner self-hosted local.
-
-La guía completa —operación, logs, ingestas, backups, restauración y configuración
-del runner— está en [`docs/operations.md`](docs/operations.md).
-
-## Configurar Mercado Pago
-
-La integración usa la API oficial de reportes de **Todas las transacciones**. No
-consulta solamente ventas: el reporte incluye las operaciones aprobadas que
-afectaron el dinero de la cuenta. Mercado Pago genera el reporte de manera
-asíncrona; `home-lab` solicita el período, espera la tarea, descarga el resultado y
-lo importa sin intervención manual.
-
-### Obtener el Access Token
-
-1. Ingresá a [Tus integraciones de Mercado
-   Pago](https://www.mercadopago.com.ar/developers/panel/app) con la misma cuenta
-   cuyos movimientos querés importar.
-2. Creá una aplicación (por ejemplo, `home-lab`) o abrí una existente.
-3. Entrá en **Producción > Credenciales de producción**. Si todavía no están
-   activas, Mercado Pago solicitará rubro, sitio web, aceptación de términos y
-   reCAPTCHA.
-4. Copiá únicamente el **Access Token** de producción, que comienza normalmente
-   con `APP_USR-`. No hace falta usar la Public Key, Client ID ni Client Secret.
-5. Guardalo en el `.env` local, que está excluido de Git:
-
-   ```dotenv
-   MERCADOPAGO_ACCESS_TOKEN=APP_USR-tu-token-real
-   ```
-
-El token es una clave privada con acceso a información de la cuenta: no debe
-pegarse en el código, el README, una captura ni un commit. Puede renovarse desde el
-mismo panel si alguna vez queda expuesto.
-
-La primera vez, configurá las columnas estables que necesita el importador:
-
-```bash
-.venv/bin/home-lab configure-mercadopago
-```
-
-Este comando crea o actualiza la configuración compartida del reporte en Mercado
-Pago (columnas, separador, idioma y zona horaria); no activa una programación en
-los servidores de Mercado Pago.
-
-### Sincronizar movimientos
-
-Para importar un período y reconstruir Silver/Gold:
-
-```bash
-.venv/bin/home-lab sync-mercadopago --from 2026-07-01 --to 2026-07-26
-```
-
-Sin fechas importa el día anterior, que es el modo recomendado para cron:
-
-```bash
-scripts/sync-mercadopago.sh
-```
-
-Ejemplo diario a las 06:30:
-
-```cron
-30 6 * * * /home/emiliano/home-lab/scripts/sync-mercadopago.sh >> /home/emiliano/home-lab/data/mercadopago-sync.log 2>&1
-```
-
-Repetir exactamente el mismo período reemplaza su lote anterior. Los lotes API
-se guardan en `bronze.mercadopago_api_movements`. Los períodos superpuestos se
-desduplican en Silver por ID de operación y, cuando el ID no está disponible, por
-la firma y ocurrencia de la fila. El formato oficial no incluye el saldo acumulado
-de cada fila, por lo que `running_balance` queda vacío para registros obtenidos
-por API; ingresos, egresos, flujo neto, categorías y conciliación siguen
-disponibles.
-
-El resumen de cuenta descargado manualmente se trata como un documento financiero
-cerrado, no como otro lote API:
-
-```bash
-.venv/bin/home-lab import-account-statement data/raw/account_statement.csv
-.venv/bin/home-lab transform
-```
-
-El CSV original se conserva por contenido en
-`data/bronze/financial-statements/mercadopago/<año>/<mes>/`. Su metadata, período,
-saldos y hash quedan en `bronze.financial_statements`, y sus movimientos en
-`bronze.mercadopago_statement_movements`. Antes de persistirlo se valida que:
-
-- créditos y débitos coincidan con el encabezado;
-- saldo inicial más movimientos sea igual al saldo final;
-- cada movimiento reconcilie con su saldo acumulado.
-
-Si todos los movimientos pertenecen al mismo mes, la cobertura se expande al mes
-calendario completo. Dentro de esa cobertura Silver usa exclusivamente el
-statement manual, que aporta las descripciones y saldos definitivos. Las filas API
-se mantienen intactas en Bronze para auditoría, pero no aparecen duplicadas en
-Gold. Fuera de los períodos cerrados por statements, la API sigue aportando los
-movimientos más recientes.
-
-La ubicación de los documentos puede cambiarse con:
-
-```dotenv
-FINANCIAL_STATEMENT_STORE_PATH=/ruta/privada/financial-statements
-```
-
-Al inicializar una instalación existente, los lotes previos del esquema legado
-`raw` se copian sin eliminar el origen. Silver continúa leyendo la tabla histórica
-`bronze.mercadopago_account_statements` para mantener compatibilidad hasta que sus
-statements se vuelvan a importar como documentos.
-
-## Configurar Gmail
-
-La integración solicita únicamente acceso de lectura:
-
-```text
-https://www.googleapis.com/auth/gmail.readonly
-```
-
-1. En un proyecto de Google Cloud, habilitá Gmail API.
-2. Creá un cliente OAuth para aplicación de escritorio.
-3. Descargá el JSON como `secrets/gmail_client_secret.json`.
-4. Autorizá la cuenta desde una sesión local:
-
-   ```bash
-   .venv/bin/home-lab gmail-auth
-   ```
-
-El token se guarda en `secrets/gmail_token.json` con permisos restringidos. No se
-almacena la contraseña de Gmail.
-
-El filtro predeterminado se configura en `.env`. Incluye adjuntos PDF de Zeta,
-facturas enlazadas de EPE, Aguas Santafesinas y Litoral Gas, y resúmenes de
-Naranja X:
-
-```dotenv
-GMAIL_QUERY={from:no_reply@zetace.com.ar from:oficinavirtual@epe.santafe.gov.ar from:facturadigital@aguassantafesinas.com from:factura@digital.litoralgas.com.ar from:avisos@info.naranjax.com} newer_than:45d
-```
-
-Para ejecutar el flujo completo:
-
-```bash
+# Sincronizar documentos de Gmail
 .venv/bin/home-lab sync-gmail
-```
 
-Ese comando descarga adjuntos nuevos, procesa documentos pendientes y ejecuta
-`dbt build`. Es idempotente: repetirlo no duplica correos ni PDF.
+# Sincronizar el día anterior de Mercado Pago
+.venv/bin/home-lab sync-mercadopago
 
-### Automatización
-
-El script usa `flock` para impedir ejecuciones superpuestas:
-
-```bash
-scripts/sync-gmail.sh
-```
-
-Ejemplo de cron diario a las 07:15:
-
-```cron
-15 7 * * * /home/emiliano/home-lab/scripts/sync-gmail.sh >> /home/emiliano/home-lab/data/gmail-sync.log 2>&1
-```
-
-## Parser de expensas Zeta
-
-El parser `zetace_expenses` extrae:
-
-- consorcio, unidad, período y fecha de emisión;
-- primer y segundo vencimiento con sus importes;
-- expensas generales y extraordinarias;
-- saldo anterior y cobranzas.
-
-Cada resultado conserva nombre y versión del parser. Los estados posibles son
-`parsed`, `unsupported` y `failed`, permitiendo corregir el parser y reprocesar sin
-volver a consultar Gmail.
-
-## Facturas de EPE
-
-Los correos de EPE no adjuntan el documento. El flujo reconoce únicamente enlaces
-del endpoint oficial de facturación de EPE, sigue su redirección a HTTPS, valida la
-firma PDF y aplica el mismo límite de tamaño que a un adjunto. El parser
-`epe_electricity_bill` extrae cliente, domicilio del suministro, emisión, consumo,
-total y las dos cuotas con sus vencimientos. Las cuotas se publican como
-vencimientos independientes para permitir su conciliación con movimientos.
-
-## Facturas de ASSA y Litoral Gas
-
-El flujo reconoce los botones de descarga enviados por Aguas Santafesinas y
-Litoral Gas, decodifica localmente sus enlaces de seguimiento y sólo descarga
-desde los endpoints de facturación permitidos. El parser de ASSA publica las dos
-cuotas de la factura de agua y reconoce los reclamos de facturas vencidas como
-obligaciones de vencimiento único; el de Litoral Gas publica su vencimiento
-único. Ambos extraen cliente, período, emisión, domicilio, consumo cuando está
-disponible e importe.
-
-Para probar o recuperar un PDF local:
-
-```bash
-.venv/bin/home-lab import-document /ruta/al/documento.pdf
-.venv/bin/home-lab transform
-```
-
-## TGI de Rosario
-
-SIAT no ofrece una API pública, pero su gestión con código personal funciona con
-un flujo HTTP estable y no requiere un navegador ni CAPTCHA. La integración inicia
-una sesión anónima, descubre los períodos seleccionables y descarga cada boleta
-mensual desde el endpoint oficial. Las boletas se deduplican por cuenta y período.
-
-Guardá el número de cuenta y el código de gestión personal únicamente en `.env`:
-
-```dotenv
-SIAT_TGI_ACCOUNT=tu-numero-de-cuenta
-SIAT_TGI_MANAGEMENT_CODE=tu-codigo-de-gestion
-```
-
-Para descargar boletas nuevas, procesarlas y reconstruir Silver/Gold:
-
-```bash
+# Descargar boletas nuevas de TGI
 .venv/bin/home-lab sync-siat-tgi
+
+# Reconstruir y validar Silver/Gold
+.venv/bin/home-lab transform
+
+# Levantar el dashboard
+docker compose up -d --build dashboard
 ```
 
-El script de automatización usa `flock` para evitar ejecuciones superpuestas:
-
-```bash
-scripts/sync-siat-tgi.sh
-```
-
-Ejemplo semanal, los lunes a las 07:30:
-
-```cron
-30 7 * * 1 /home/emiliano/home-lab/scripts/sync-siat-tgi.sh >> /home/emiliano/home-lab/data/siat-tgi-sync.log 2>&1
-```
-
-El parser `rosario_tgi_bill` extrae cuenta, inmueble, período, emisión, vencimiento
-e importe. La cuenta y el código son secretos locales y nunca se escriben en logs
-ni en metadatos de ingesta.
-
-## Resúmenes de Naranja X
-
-Los correos de Naranja X contienen un enlace al PDF en lugar de adjuntarlo. El
-flujo sólo admite el endpoint oficial de resúmenes, valida que la respuesta sea un
-PDF y aplica el límite de tamaño configurado.
-
-El parser extrae cierre, vencimiento, total en pesos y dólares, entrega mínima y
-cada consumo o cargo con fecha, tarjeta, cupón, plan, moneda e importe. El resumen
-se publica como obligación y los consumos en `gold.credit_card_expenses`. Estos
-últimos se muestran separados de `gold.movements` para no duplicar el gasto cuando
-posteriormente se paga el resumen.
-
-## Modelos de datos
-
-Tablas y vistas principales:
-
-```text
-bronze.gmail_messages
-bronze.gmail_attachments
-bronze.document_parse_results
-bronze.financial_statements
-bronze.mercadopago_statement_movements
-bronze.mercadopago_api_movements
-bronze.mercadopago_account_statements
-
-silver.movements
-silver.documents
-silver.invoices
-silver.invoice_due_dates
-silver.invoice_line_items
-silver.credit_card_transactions
-
-gold.movements
-gold.bills
-gold.documents
-gold.movement_document_candidates
-gold.credit_card_expenses
-```
-
-Una factura es una obligación y no un movimiento realizado. Gold conserva esa
-separación y genera candidatos de conciliación cuando coinciden el importe y una
-ventana razonable alrededor del vencimiento.
-
-Los comprobantes históricos que ya no estén disponibles en su fuente pueden
-registrarse localmente en `bronze.manual_shared_expenses`. Sus valores permanecen
-en PostgreSQL y no se versionan en Git.
-
-## Gastos compartidos
-
-El resumen mensual reúne las obligaciones del hogar y los movimientos usados para
-pagarlas. Las facturas de Expensas, Luz, Agua, Gas y TGI entran en el mes de su
-vencimiento. El alquiler bruto se carga para cada mes en el dashboard y el
-movimiento categorizado como `Alquiler` en Mercado Pago se usa para comprobar el
-pago.
-
-El cálculo conserva separadas las obligaciones y los pagos:
-
-```text
-alquiler bruto - expensas extraordinarias = alquiler efectivo
-alquiler efectivo + facturas del mes      = total del hogar
-total del hogar / 2                       = parte de cada persona
-total del hogar - pagos conciliados       = pendiente
-```
-
-Las expensas extraordinarias se muestran para explicar el descuento aplicado al
-alquiler, pero no se suman nuevamente al total. `Parte de cada persona` representa
-una división en partes iguales; todavía no descuenta transferencias entre Emiliano
-y Vitoria ni determina quién le debe a quién.
-
-Cada servicio puede tener uno de estos estados:
-
-- **Pagado**: todas sus facturas del mes tienen un movimiento conciliado;
-- **Parcial**: sólo una parte de las facturas o cuotas está conciliada;
-- **Pendiente**: existe la factura, pero todavía no se encontró el pago;
-- **Sin factura**: aún no se importó una obligación para ese servicio y mes.
-
-La conciliación usa las facturas importadas desde Gmail o SIAT y busca pagos
-compatibles en los movimientos de Mercado Pago. Los períodos históricos que ya no
-puedan descargarse pueden cargarse en `bronze.manual_shared_expenses`; participan
-del mismo resumen sin guardar importes personales en el repositorio.
-
-En la pantalla **Gastos compartidos** se puede:
-
-- elegir el mes y ver el total, la parte de cada persona y el progreso de pago;
-- cargar o corregir el alquiler bruto informado por la inmobiliaria;
-- revisar el cálculo separado del alquiler;
-- identificar rápidamente servicios pendientes y sus vencimientos;
-- copiar un resumen para compartir por WhatsApp;
-- desplegar el detalle de facturas y conciliaciones.
-
-Los PDFs originales se conservan en el almacenamiento documental. Se pueden buscar
-y descargar desde **Documentos y facturas**.
+Las sincronizaciones también tienen scripts preparados para cron y protegidos
+con `flock`. Consultá la
+[guía de integraciones](docs/integrations.md) para configurarlas.
 
 ## Dashboard
 
-Construí Gold y levantá la aplicación:
+Después de construir Gold y levantar la aplicación:
 
 ```bash
 .venv/bin/home-lab transform
 docker compose up -d --build dashboard
 ```
 
-Abrí [http://localhost:8501](http://localhost:8501). Desde otro dispositivo de la
-misma red local, usá `http://<ip-local-de-la-pc>:8501`. El dashboard ofrece:
+Abrí [http://localhost:8501](http://localhost:8501). Desde otro dispositivo de
+la red local, usá `http://<ip-local-de-la-pc>:8501`.
 
-- resumen mensual de los gastos compartidos con Vitoria;
-- cálculo del alquiler neto descontando expensas extraordinarias;
-- conciliación entre facturas y pagos de Mercado Pago;
-- resumen y movimientos financieros;
-- documentos y facturas;
-- vencimientos e importes;
-- descarga del PDF original;
-- estado y errores de parsing.
+La aplicación permite revisar movimientos, obligaciones, conciliaciones,
+documentos, vencimientos y gastos compartidos, además de cargar el alquiler
+bruto mensual. El almacenamiento documental se monta como sólo lectura dentro
+del contenedor.
 
-El almacenamiento documental se monta como sólo lectura dentro del contenedor.
+La lógica funcional y las pantallas están documentadas en
+[`docs/dashboard.md`](docs/dashboard.md).
+
+## Documentación
+
+| Guía | Contenido |
+| --- | --- |
+| [Arquitectura](docs/architecture.md) | Capas, almacenamiento, idempotencia y estructura Python |
+| [Integraciones](docs/integrations.md) | Credenciales, fuentes, parsers, sincronización y cron |
+| [Modelo de datos](docs/data-model.md) | Tablas principales, obligaciones y conciliación |
+| [Dashboard](docs/dashboard.md) | Gastos compartidos y superficies de consulta |
+| [Operación](docs/operations.md) | Producción, logs, backups, restauración y CI/CD |
 
 ## Validación
 
@@ -419,34 +140,6 @@ El almacenamiento documental se monta como sólo lectura dentro del contenedor.
 .venv/bin/home-lab transform
 ```
 
-dbt valida claves, relaciones, estados aceptados y que los conceptos de una expensa
-sumen el importe del primer vencimiento.
-
-## Estructura Python
-
-Todo el código pertenece al namespace `home_lab` y las integraciones están agrupadas
-por fuente o responsabilidad:
-
-```text
-src/home_lab/
-├── cli.py
-├── config.py
-├── database.py
-├── gmail/
-│   ├── client.py
-│   ├── repository.py
-│   └── pipeline.py
-├── mercadopago/
-│   ├── client.py
-│   ├── importer.py
-│   └── pipeline.py
-├── documents/
-│   ├── pdf.py
-│   ├── storage.py
-│   └── parsers/
-└── dashboard/
-```
-
-Mercado Pago separa el cliente HTTP, la transformación/carga y la orquestación.
-Gmail aplica la misma separación para llamadas externas, persistencia Bronze y
-pipeline, evitando paquetes genéricos como `core` o `integrations`.
+dbt valida claves, relaciones, estados aceptados y reglas de consistencia del
+modelo. Los detalles se encuentran en
+[`docs/data-model.md`](docs/data-model.md).
