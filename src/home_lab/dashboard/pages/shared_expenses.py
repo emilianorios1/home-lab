@@ -12,6 +12,7 @@ from home_lab.dashboard.queries import (
     monthly_shared_expenses,
     shared_expense_months,
 )
+from home_lab.dashboard.rents import save_monthly_rent
 from home_lab.database import get_engine
 
 
@@ -72,15 +73,12 @@ SERVICE_ORDER = {
 
 engine = get_engine()
 months = shared_expense_months(engine)
+current_month = date.today().replace(day=1)
+months = sorted({*months, current_month})
 
 st.title("Gastos compartidos")
 st.caption("Resumen del hogar y monto mensual a dividir con Vitoria.")
 
-if not months:
-    st.info("Todavía no hay facturas ni pagos de alquiler para resumir.")
-    st.stop()
-
-current_month = date.today().replace(day=1)
 default_month = max((month for month in months if month <= current_month), default=months[-1])
 selected_month = st.selectbox(
     "Mes",
@@ -92,6 +90,33 @@ summary = monthly_shared_expenses(engine, selected_month)
 services = summary["services"].copy()
 rent = summary["rent"]
 expenses = services.loc[services["category"] == "Expensas"].iloc[0]
+
+with st.expander("✏️ Cargar alquiler bruto", expanded=not rent["configured"]):
+    st.caption(
+        "Ingresá el importe informado por la inmobiliaria. Las expensas "
+        "extraordinarias se descuentan automáticamente."
+    )
+    with st.form(f"rent_{selected_month.isoformat()}"):
+        gross_amount = st.number_input(
+            "Alquiler bruto",
+            min_value=0.01,
+            value=float(rent["gross"]) or 0.01,
+            step=1000.0,
+            format="%.2f",
+        )
+        submitted = st.form_submit_button("Guardar alquiler", type="primary")
+    if submitted:
+        saved_amount = save_monthly_rent(
+            engine,
+            selected_month,
+            Decimal(str(gross_amount)),
+        )
+        st.session_state["saved_rent"] = (selected_month, saved_amount)
+        st.rerun()
+
+saved_rent = st.session_state.pop("saved_rent", None)
+if saved_rent and saved_rent[0] == selected_month:
+    st.success(f"Alquiler bruto guardado: {ars(saved_rent[1])}.")
 
 st.subheader(f"Resumen de {month_label(selected_month).lower()}")
 share, total = st.columns([1.5, 1])

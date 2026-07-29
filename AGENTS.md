@@ -31,8 +31,8 @@ Bronze/Silver/Gold architecture.
   document contents in database tables.
 - Imports and synchronization flows must remain idempotent. Preserve the current
   deduplication keys and source lineage when extending them.
-- The Streamlit dashboard is read-only. Writes belong in ingestion, parsing, or
-  explicit maintenance workflows.
+- Streamlit reporting pages are read-only. Keep writes limited to explicit
+  data-entry or maintenance interfaces and persist them in Bronze.
 - Keep the legacy `raw` compatibility path working unless a task explicitly
   includes a migration and removal plan.
 - External document downloads must remain restricted to trusted source
@@ -49,7 +49,8 @@ Bronze/Silver/Gold architecture.
 - `src/home_lab/siat/`: Rosario TGI client and pipeline.
 - `src/home_lab/documents/`: PDF validation, content-addressed storage, parser
   registry, and source-specific parsers.
-- `src/home_lab/dashboard/`: read-only queries and Streamlit pages.
+- `src/home_lab/dashboard/`: reporting queries and Streamlit pages, including
+  explicit manual data-entry interfaces.
 - `dbt/models/silver/`: normalization models.
 - `dbt/models/gold/`: reporting and reconciliation models.
 - `dbt/tests/` and model `schema.yml` files: dbt data-quality assertions.

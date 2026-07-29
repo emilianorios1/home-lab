@@ -191,6 +191,15 @@ def create_schema(engine: Engine) -> None:
             UNIQUE (summary_month, category, issuer)
         )
         """,
+        """
+        CREATE TABLE IF NOT EXISTS bronze.manual_monthly_rents (
+            summary_month DATE PRIMARY KEY
+                CHECK (extract(day FROM summary_month) = 1),
+            gross_amount NUMERIC(18, 2) NOT NULL CHECK (gross_amount > 0),
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+        """,
         "CREATE INDEX IF NOT EXISTS mercadopago_account_statements_batch_id_idx ON raw.mercadopago_account_statements(batch_id)",
         "CREATE INDEX IF NOT EXISTS bronze_mercadopago_batch_id_idx ON bronze.mercadopago_account_statements(batch_id)",
         "CREATE INDEX IF NOT EXISTS financial_statements_coverage_idx ON bronze.financial_statements(provider, account_key, period_start, period_end)",

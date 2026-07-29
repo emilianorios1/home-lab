@@ -1,5 +1,6 @@
 from collections.abc import Iterator
 from datetime import date
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -18,6 +19,7 @@ from home_lab.dashboard.queries import (
     overview,
     shared_expense_months,
 )
+from home_lab.dashboard.rents import calculate_net_rent, save_monthly_rent
 from home_lab.database import create_schema, get_engine
 from home_lab.mercadopago.importer import (
     CSV_COLUMNS,
@@ -199,6 +201,58 @@ def test_monthly_shared_expenses_have_monthly_summary_shape() -> None:
     )
     assert 0 <= summary["payment_progress"] <= 1
     assert abs(summary["per_person"] - summary["shared_total"] / 2) <= 0.005
+
+
+def test_manual_gross_rent_calculates_net_amount() -> None:
+    engine = get_engine()
+    month = date(2099, 12, 1)
+    try:
+        saved = save_monthly_rent(engine, month, Decimal("12345.678"))
+        summary = monthly_shared_expenses(engine, month)
+
+        assert saved == Decimal("12345.68")
+        assert month in shared_expense_months(engine)
+        assert summary["rent"] == {
+            "gross": Decimal("12345.68"),
+            "extraordinary": Decimal("0"),
+            "net": Decimal("12345.68"),
+            "paid": Decimal("0"),
+            "configured": True,
+        }
+        assert summary["shared_total"] == Decimal("12345.68")
+        assert summary["paid_total"] == Decimal("0")
+        assert summary["pending_total"] == Decimal("12345.68")
+        save_monthly_rent(engine, month, saved)
+        with engine.connect() as connection:
+            row_count = connection.execute(
+                text(
+                    """
+                    SELECT count(*)
+                    FROM bronze.manual_monthly_rents
+                    WHERE summary_month = :month
+                    """
+                ),
+                {"month": month},
+            ).scalar_one()
+        assert row_count == 1
+    finally:
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    """
+                    DELETE FROM bronze.manual_monthly_rents
+                    WHERE summary_month = :month
+                    """
+                ),
+                {"month": month},
+            )
+
+
+def test_net_rent_discounts_extraordinary_expenses() -> None:
+    assert calculate_net_rent(
+        Decimal("500000"),
+        Decimal("25000"),
+    ) == Decimal("475000")
 
 
 def test_credit_card_queries_have_expected_shape() -> None:

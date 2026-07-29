@@ -8,6 +8,8 @@ from decimal import ROUND_HALF_UP, Decimal
 import pandas as pd
 from sqlalchemy import Engine, text
 
+from home_lab.dashboard.rents import calculate_net_rent
+
 
 def available_date_range(engine: Engine) -> tuple[date, date] | None:
     with engine.connect() as connection:
@@ -297,6 +299,9 @@ def shared_expense_months(engine: Engine) -> list[date]:
                     SELECT date_trunc('month', release_date)::date
                     FROM gold.movements
                     WHERE category = 'Alquiler'
+                    UNION ALL
+                    SELECT summary_month
+                    FROM bronze.manual_monthly_rents
                 ) months
                 WHERE summary_month IS NOT NULL
                 ORDER BY summary_month
@@ -329,7 +334,7 @@ def monthly_shared_expenses(engine: Engine, month: date) -> dict[str, object]:
             {"month": month},
         )
         bills = {row.category: row for row in bill_rows}
-        rent_net = connection.execute(
+        rent_paid = connection.execute(
             text(
                 """
                 SELECT coalesce(sum(abs(amount)), 0)
@@ -340,6 +345,16 @@ def monthly_shared_expenses(engine: Engine, month: date) -> dict[str, object]:
             ),
             {"month": month},
         ).scalar_one()
+        configured_gross_rent = connection.execute(
+            text(
+                """
+                SELECT gross_amount
+                FROM bronze.manual_monthly_rents
+                WHERE summary_month = :month
+                """
+            ),
+            {"month": month},
+        ).scalar_one_or_none()
         extraordinary = connection.execute(
             text(
                 """
@@ -353,9 +368,23 @@ def monthly_shared_expenses(engine: Engine, month: date) -> dict[str, object]:
             {"month": month},
         ).scalar_one()
 
-    rent_net = Decimal(rent_net)
+    rent_paid = Decimal(rent_paid)
     extraordinary = Decimal(extraordinary)
-    gross_rent = rent_net + extraordinary
+    gross_rent = (
+        Decimal(configured_gross_rent)
+        if configured_gross_rent is not None
+        else rent_paid + extraordinary
+    )
+    rent_net = calculate_net_rent(gross_rent, extraordinary)
+    applied_rent_payment = min(rent_paid, rent_net)
+    if not configured_gross_rent:
+        rent_status = "Sin cargar"
+    elif applied_rent_payment >= rent_net:
+        rent_status = "Pagado"
+    elif applied_rent_payment:
+        rent_status = "Parcial"
+    else:
+        rent_status = "Pendiente"
 
     def bill_values(
         category: str,
@@ -377,13 +406,13 @@ def monthly_shared_expenses(engine: Engine, month: date) -> dict[str, object]:
         {
             "concept": "Alquiler bruto",
             "amount": gross_rent,
-            "paid_amount": rent_net,
-            "status": "Calculado" if rent_net else "Sin movimiento",
+            "paid_amount": applied_rent_payment,
+            "status": "Cargado" if configured_gross_rent is not None else "Calculado",
         },
         {
             "concept": "Expensas extraordinarias",
             "amount": extraordinary,
-            "paid_amount": extraordinary if rent_net else Decimal("0"),
+            "paid_amount": extraordinary if configured_gross_rent else Decimal("0"),
             "status": "Descontado" if extraordinary else "Sin factura",
         },
     ]
@@ -425,13 +454,13 @@ def monthly_shared_expenses(engine: Engine, month: date) -> dict[str, object]:
                 {
                     "concept": "Alquiler a pagar",
                     "amount": rent_net,
-                    "paid_amount": rent_net,
-                    "status": "Pagado" if rent_net else "Sin movimiento",
+                    "paid_amount": applied_rent_payment,
+                    "status": rent_status,
                 }
             )
 
     shared_total = rent_net + expected_bills
-    paid_total = rent_net + paid_bills
+    paid_total = applied_rent_payment + paid_bills
     pending_total = max(shared_total - paid_total, Decimal("0"))
     payment_progress = (
         min(paid_total / shared_total, Decimal("1"))
@@ -446,6 +475,8 @@ def monthly_shared_expenses(engine: Engine, month: date) -> dict[str, object]:
             "gross": gross_rent,
             "extraordinary": extraordinary,
             "net": rent_net,
+            "paid": rent_paid,
+            "configured": configured_gross_rent is not None,
         },
         "shared_total": shared_total,
         "per_person": (shared_total / Decimal("2")).quantize(
