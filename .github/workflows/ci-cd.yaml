@@ -75,6 +75,7 @@ jobs:
           docker compose --env-file .env.production.example -f compose.production.yaml config --quiet
 
       - name: Build production image
+        if: github.event_name == 'pull_request'
         run: docker build --file Dockerfile.dashboard --tag home-lab:ci .
 
   publish:
