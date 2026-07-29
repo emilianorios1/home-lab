@@ -1,6 +1,12 @@
 import base64
+from unittest.mock import MagicMock, patch
 
-from home_lab.gmail.client import attachment_bytes, linked_pdfs, pdf_parts
+from home_lab.gmail.client import (
+    attachment_bytes,
+    download_linked_pdf,
+    linked_pdfs,
+    pdf_parts,
+)
 
 
 def test_finds_nested_pdf_parts() -> None:
@@ -56,6 +62,24 @@ def test_finds_epe_invoice_link_in_html_body() -> None:
     assert len(links) == 1
     assert links[0].filename == "epe-2028476-2026-4.pdf"
     assert links[0].url == url
+
+
+def test_downloads_epe_invoice_over_https() -> None:
+    url = (
+        "http://www.epe.santafe.gov.ar/comercial/facturacion/facturas/"
+        "generar_facturacorreo.php?numerodecliente=2028476&anio=2026&mes=4"
+    )
+    content = b"%PDF-1.4"
+    response = MagicMock()
+    response.__enter__.return_value = response
+    response.geturl.return_value = url.replace("http://", "https://")
+    response.headers = {"Content-Length": str(len(content))}
+    response.read.return_value = content
+
+    with patch("home_lab.gmail.client.urlopen", return_value=response) as opener:
+        assert download_linked_pdf(url, 1024) == content
+
+    assert opener.call_args.args[0].full_url == url.replace("http://", "https://")
 
 
 def test_ignores_untrusted_pdf_link() -> None:

@@ -178,7 +178,7 @@ volver a consultar Gmail.
 ### EPE
 
 Los correos de EPE no adjuntan el documento. El flujo reconoce únicamente
-enlaces del endpoint oficial de facturación de EPE, sigue su redirección a HTTPS,
+enlaces del endpoint oficial de facturación de EPE, normaliza su esquema a HTTPS,
 valida la firma PDF y aplica el mismo límite de tamaño que a un adjunto.
 
 El parser `epe_electricity_bill` extrae cliente, domicilio del suministro,
