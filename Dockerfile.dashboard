@@ -1,10 +1,31 @@
-FROM python:3.12-slim
+FROM python:3.12-slim-bookworm AS runtime
+
+ENV HOME=/tmp \
+    HOME_LAB_DBT_PROJECT_DIR=/app/dbt \
+    DBT_SEND_ANONYMOUS_USAGE_STATS=false \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1 \
+    STREAMLIT_BROWSER_GATHER_USAGE_STATS=false \
+    STREAMLIT_SERVER_HEADLESS=true
 
 WORKDIR /app
 
-COPY . .
-RUN pip install --no-cache-dir .
+RUN groupadd --gid 10001 home-lab \
+    && useradd --uid 10001 --gid home-lab --no-create-home --shell /usr/sbin/nologin home-lab
+
+COPY pyproject.toml README.md ./
+COPY src ./src
+COPY dbt ./dbt
+
+RUN python -m pip install --upgrade pip \
+    && python -m pip install .
+
+USER 10001:10001
 
 EXPOSE 8501
 
-CMD ["streamlit", "run", "src/home_lab/dashboard/app.py", "--server.address=0.0.0.0", "--server.port=8501"]
+CMD ["streamlit", "run", "src/home_lab/dashboard/app.py", \
+     "--server.address=0.0.0.0", "--server.port=8501", \
+     "--server.fileWatcherType=none"]

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -24,8 +25,31 @@ from home_lab.mercadopago.pipeline import (
 from home_lab.siat.pipeline import sync_tgi
 
 
-DBT_PROJECT_DIR = Path(__file__).resolve().parents[2] / "dbt"
 ARGENTINA_TIMEZONE = ZoneInfo("America/Argentina/Buenos_Aires")
+
+
+def resolve_dbt_project_dir() -> Path:
+    configured = os.getenv("HOME_LAB_DBT_PROJECT_DIR")
+    if configured:
+        project_dir = Path(configured).expanduser().resolve()
+        if (project_dir / "dbt_project.yml").is_file():
+            return project_dir
+        raise FileNotFoundError(
+            "HOME_LAB_DBT_PROJECT_DIR does not contain dbt_project.yml: "
+            f"{project_dir}"
+        )
+
+    candidates = (
+        Path(__file__).resolve().parents[2] / "dbt",
+        Path.cwd() / "dbt",
+    )
+    for candidate in candidates:
+        if (candidate / "dbt_project.yml").is_file():
+            return candidate.resolve()
+
+    raise FileNotFoundError(
+        "Could not locate the dbt project; set HOME_LAB_DBT_PROJECT_DIR"
+    )
 
 
 def iso_date(value: str) -> date:
@@ -38,13 +62,14 @@ def iso_date(value: str) -> date:
 def run_transform() -> bool:
     from dbt.cli.main import dbtRunner
 
+    project_dir = resolve_dbt_project_dir()
     result = dbtRunner().invoke(
         [
             "build",
             "--project-dir",
-            str(DBT_PROJECT_DIR),
+            str(project_dir),
             "--profiles-dir",
-            str(DBT_PROJECT_DIR),
+            str(project_dir),
         ]
     )
     return result.success

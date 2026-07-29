@@ -1,0 +1,15 @@
+[Unit]
+Description=home-lab production stack
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=%h/.config/home-lab/production-compose.sh up -d --wait --wait-timeout 180 postgres dashboard
+ExecStop=%h/.config/home-lab/production-compose.sh stop -t 30 dashboard postgres
+TimeoutStartSec=240
+TimeoutStopSec=90
+
+[Install]
+WantedBy=default.target

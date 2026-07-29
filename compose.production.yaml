@@ -1,0 +1,146 @@
+name: home-lab-prod
+
+x-app-environment: &app-environment
+  DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+  DBT_POSTGRES_HOST: postgres
+  DBT_POSTGRES_PORT: "5432"
+  POSTGRES_DB: ${POSTGRES_DB}
+  POSTGRES_USER: ${POSTGRES_USER}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+  DOCUMENT_STORE_PATH: /data/bronze/gmail
+  FINANCIAL_STATEMENT_STORE_PATH: /data/bronze/financial-statements
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: "3"
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_INITDB_ARGS: --data-checksums --encoding=UTF8
+    volumes:
+      - prod_postgres_data:/var/lib/postgresql/data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    restart: unless-stopped
+    stop_grace_period: 60s
+    shm_size: 256mb
+    logging: *default-logging
+
+  dashboard:
+    image: ${HOME_LAB_IMAGE:?HOME_LAB_IMAGE must identify the deployed image}
+    environment:
+      <<: *app-environment
+      STREAMLIT_SERVER_ENABLE_XSRF_PROTECTION: "true"
+      STREAMLIT_SERVER_ENABLE_CORS: "true"
+    ports:
+      - "${HOME_LAB_PROD_BIND:-0.0.0.0}:${HOME_LAB_PROD_PORT:-8501}:8501"
+    volumes:
+      - ${HOME_LAB_PROD_DATA_DIR:?HOME_LAB_PROD_DATA_DIR must be set}:/data:ro
+    networks:
+      - backend
+      - frontend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "from urllib.request import urlopen; urlopen('http://localhost:8501/_stcore/health', timeout=3)"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:uid=10001,gid=10001,mode=0750
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 30s
+    logging: *default-logging
+
+  migrate:
+    image: ${HOME_LAB_IMAGE:?HOME_LAB_IMAGE must identify the deployed image}
+    profiles: ["ops"]
+    environment:
+      <<: *app-environment
+    command: ["sh", "-ec", "home-lab init-db && home-lab transform"]
+    networks:
+      - backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp:uid=10001,gid=10001,mode=0750
+      - /app/dbt/logs:uid=10001,gid=10001,mode=0750
+      - /app/dbt/target:uid=10001,gid=10001,mode=0750
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    logging: *default-logging
+
+  tools:
+    image: ${HOME_LAB_IMAGE:?HOME_LAB_IMAGE must identify the deployed image}
+    profiles: ["ops"]
+    user: "${HOME_LAB_HOST_UID:-1000}:${HOME_LAB_HOST_GID:-1000}"
+    environment:
+      <<: *app-environment
+      GMAIL_CLIENT_SECRET_PATH: /secrets/gmail_client_secret.json
+      GMAIL_TOKEN_PATH: /secrets/gmail_token.json
+      GMAIL_QUERY: ${GMAIL_QUERY:-}
+      DOCUMENT_MAX_BYTES: ${DOCUMENT_MAX_BYTES:-20971520}
+      SIAT_TGI_ACCOUNT: ${SIAT_TGI_ACCOUNT:-}
+      SIAT_TGI_MANAGEMENT_CODE: ${SIAT_TGI_MANAGEMENT_CODE:-}
+      MERCADOPAGO_ACCESS_TOKEN: ${MERCADOPAGO_ACCESS_TOKEN:-}
+    entrypoint: ["home-lab"]
+    volumes:
+      - ${HOME_LAB_PROD_DATA_DIR:?HOME_LAB_PROD_DATA_DIR must be set}:/data:rw
+      - ${HOME_LAB_PROD_SECRETS_DIR:?HOME_LAB_PROD_SECRETS_DIR must be set}:/secrets:rw
+    tmpfs:
+      - /app/dbt/logs:uid=${HOME_LAB_HOST_UID:-1000},gid=${HOME_LAB_HOST_GID:-1000},mode=0750
+      - /app/dbt/target:uid=${HOME_LAB_HOST_UID:-1000},gid=${HOME_LAB_HOST_GID:-1000},mode=0750
+    networks:
+      - backend
+      - egress
+    depends_on:
+      postgres:
+        condition: service_healthy
+    init: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    logging: *default-logging
+
+volumes:
+  prod_postgres_data:
+    name: home-lab-prod-postgres-data
+
+networks:
+  backend:
+    name: home-lab-prod-backend
+    internal: true
+  frontend:
+    name: home-lab-prod-frontend
+  egress:
+    name: home-lab-prod-egress

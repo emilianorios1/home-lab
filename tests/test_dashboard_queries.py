@@ -35,10 +35,12 @@ def build_analytics_models(
     source = tmp_path_factory.mktemp("dashboard") / "dashboard-statement.csv"
     source.write_text(
         "INITIAL_BALANCE;CREDITS;DEBITS;FINAL_BALANCE\n"
-        "0,00;100,00;-25,00;75,00\n\n"
+        "0,00;100,00;-50,00;50,00\n\n"
         + ";".join(CSV_COLUMNS)
         + "\n01-06-2026;Transferencia recibida;dashboard-income;100,00;100,00\n"
         + "02-06-2026;Pago Netflix;dashboard-netflix;-25,00;75,00\n"
+        + "03-06-2026;Transferencia enviada Bled Cesar Adrian;"
+        "dashboard-rent;-25,00;50,00\n"
     )
     statement = process(source, storage_root=source.parent / "statement-store")
     assert run_transform()
