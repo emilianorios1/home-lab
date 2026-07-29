@@ -55,6 +55,32 @@ models:
                 values: [USD]
               config:
                 where: "foreign_currency is not null"
+  - name: silver_export_invoices
+    description: Facturas E emitidas, separadas de las obligaciones del hogar.
+    columns:
+      - name: invoice_id
+        data_tests: [not_null, unique]
+      - name: document_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('silver_documents')
+                field: document_id
+      - name: invoice_key
+        data_tests: [not_null, unique]
+      - name: issue_date
+        data_tests: [not_null]
+      - name: foreign_currency
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [USD]
+      - name: foreign_total_amount
+        data_tests: [not_null]
+      - name: exchange_rate
+        data_tests: [not_null]
+      - name: cae
+        data_tests: [not_null, unique]
   - name: silver_invoice_due_dates
     columns:
       - name: invoice_id

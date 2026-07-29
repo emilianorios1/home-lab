@@ -36,6 +36,7 @@ La explicación completa está en
 - Importación y validación de resúmenes de cuenta de Mercado Pago.
 - Lectura de Gmail y descarga segura de documentos financieros.
 - Facturas de EPE, ASSA y Litoral Gas, expensas Zeta y resúmenes de Naranja X.
+- Importación y seguimiento mensual/anual de Facturas E emitidas en ARCA.
 - Descarga de boletas de TGI desde SIAT Rosario.
 - Normalización y validación del modelo mediante dbt.
 - Conciliación de obligaciones con pagos.
@@ -95,6 +96,9 @@ dashboard se muestra al terminar.
 # Descargar boletas nuevas de TGI
 .venv/bin/home-lab sync-siat-tgi
 
+# Importar una o más Facturas E locales
+.venv/bin/home-lab import-document /ruta/factura-1.pdf /ruta/factura-2.pdf
+
 # Reconstruir y validar Silver/Gold
 .venv/bin/home-lab transform
 
@@ -119,9 +123,9 @@ Abrí [http://localhost:8501](http://localhost:8501). Desde otro dispositivo de
 la red local, usá `http://<ip-local-de-la-pc>:8501`.
 
 La aplicación permite revisar movimientos, obligaciones, conciliaciones,
-documentos, vencimientos y gastos compartidos, además de cargar el alquiler
-bruto mensual. El almacenamiento documental se monta como sólo lectura dentro
-del contenedor.
+documentos, vencimientos, Facturas E y gastos compartidos, además de cargar el
+alquiler bruto mensual. El almacenamiento documental se monta como sólo lectura
+dentro del contenedor.
 
 La lógica funcional y las pantallas están documentadas en
 [`docs/dashboard.md`](docs/dashboard.md).

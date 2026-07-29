@@ -15,6 +15,9 @@ from home_lab.dashboard.queries import (
     credit_card_statements,
     daily_balance,
     expenses_by_category,
+    export_invoice_monthly,
+    export_invoice_summary,
+    export_invoices,
     monthly_shared_expenses,
     movements,
     overview,
@@ -22,6 +25,7 @@ from home_lab.dashboard.queries import (
 )
 from home_lab.dashboard.rents import calculate_net_rent, save_monthly_rent
 from home_lab.database import create_schema, get_engine
+from home_lab.gmail.repository import GmailRepository
 from home_lab.mercadopago.importer import (
     CSV_COLUMNS,
     process,
@@ -69,6 +73,131 @@ def test_dashboard_queries_read_imported_account_statement() -> None:
     movement_data = movements(engine, start_date, end_date)
     assert not movement_data.empty
     assert "category" in movement_data.columns
+
+
+def test_export_invoice_queries_keep_issued_invoices_separate() -> None:
+    engine = get_engine()
+    message_id = f"export-invoice-{uuid4()}"
+    with engine.begin() as connection:
+        document_id = connection.execute(
+            text(
+                """
+                WITH message AS (
+                    INSERT INTO bronze.gmail_messages (
+                        message_id, received_at, metadata_path
+                    )
+                    VALUES (:message_id, date '2097-06-15', 'synthetic/message.json')
+                    RETURNING message_id
+                ),
+                attachment AS (
+                    INSERT INTO bronze.gmail_attachments (
+                        message_id, attachment_id, original_filename, mime_type,
+                        byte_size, sha256, storage_path
+                    )
+                    SELECT
+                        message_id, 'attachment', 'factura-e.pdf',
+                        'application/pdf', 1, :sha256,
+                        'synthetic/factura-e.pdf'
+                    FROM message
+                    RETURNING id
+                )
+                INSERT INTO bronze.document_parse_results (
+                    attachment_id, parser_name, parser_version, status,
+                    extracted_data
+                )
+                SELECT
+                    id, 'synthetic', '1', 'parsed',
+                    jsonb_build_object(
+                        'document_type', 'export_service_invoice',
+                        'issuer', 'ARCA',
+                        'period', '2097-06-01',
+                        'issue_date', '2097-06-15',
+                        'payment_date', '2097-06-20',
+                        'point_of_sale', '00002',
+                        'invoice_number', '00000001',
+                        'foreign_currency', 'USD',
+                        'foreign_total_amount', '100.00',
+                        'exchange_rate', '1200.000000',
+                        'cae', '12345678901234',
+                        'cae_due_date', '2097-06-25'
+                    )
+                FROM attachment
+                RETURNING attachment_id
+                """
+            ),
+            {"message_id": message_id, "sha256": str(uuid4())},
+        ).scalar_one()
+
+    try:
+        pending = GmailRepository(engine).pending_attachments(
+            parser_name="targeted-test",
+            parser_version="1",
+            message_ids=(message_id,),
+        )
+        assert pending == [
+            {
+                "id": document_id,
+                "storage_path": "synthetic/factura-e.pdf",
+            }
+        ]
+
+        summary = export_invoice_summary(engine, date(2097, 6, 30))
+        detail = export_invoices(
+            engine,
+            date(2097, 6, 1),
+            date(2097, 6, 30),
+        )
+        monthly = export_invoice_monthly(engine, date(2097, 6, 30))
+
+        assert summary["current_month_usd"] == Decimal("100.00")
+        assert summary["current_month_ars"] == Decimal("120000.00")
+        assert summary["rolling_12_month_ars"] == Decimal("120000.00")
+        assert summary["invoice_count"] == 1
+        assert detail.iloc[0]["invoice_key"] == "00002-00000001"
+        assert detail.iloc[0]["total_amount_ars"] == Decimal("120000.00")
+        assert monthly.iloc[0]["invoice_count"] == 1
+
+        with engine.connect() as connection:
+            household_bill = connection.execute(
+                text(
+                    """
+                    SELECT count(*)
+                    FROM gold.bills
+                    WHERE document_id = :document_id
+                    """
+                ),
+                {"document_id": document_id},
+            ).scalar_one()
+        assert household_bill == 0
+    finally:
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    """
+                    DELETE FROM bronze.document_parse_results
+                    WHERE attachment_id = :document_id
+                    """
+                ),
+                {"document_id": document_id},
+            )
+            connection.execute(
+                text(
+                    """
+                    DELETE FROM bronze.gmail_attachments
+                    WHERE id = :document_id
+                    """
+                ),
+                {"document_id": document_id},
+            )
+            connection.execute(
+                text(
+                    """
+                    DELETE FROM bronze.gmail_messages
+                    WHERE message_id = :message_id
+                    """
+                ),
+                {"message_id": message_id},
+            )
 
 
 def test_movements_filters_by_transaction_type() -> None:

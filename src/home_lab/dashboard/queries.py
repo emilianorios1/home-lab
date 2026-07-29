@@ -237,6 +237,92 @@ def credit_card_statements(
     )
 
 
+def export_invoice_summary(engine: Engine, as_of: date) -> dict[str, object]:
+    with engine.connect() as connection:
+        row = connection.execute(
+            text(
+                """
+                SELECT
+                    coalesce(sum(foreign_total_amount) FILTER (
+                        WHERE issue_date >= date_trunc(
+                            'month',
+                            cast(:as_of AS date)
+                        )
+                    ), 0) AS current_month_usd,
+                    coalesce(sum(total_amount_ars) FILTER (
+                        WHERE issue_date >= date_trunc(
+                            'month',
+                            cast(:as_of AS date)
+                        )
+                    ), 0) AS current_month_ars,
+                    coalesce(sum(total_amount_ars), 0) AS rolling_12_month_ars,
+                    count(*) AS invoice_count
+                FROM gold.export_invoices
+                WHERE issue_date >= (
+                    date_trunc('month', cast(:as_of AS date))
+                    - interval '11 months'
+                )
+                  AND issue_date <= cast(:as_of AS date)
+                """
+            ),
+            {"as_of": as_of},
+        ).one()
+    return dict(row._mapping)
+
+
+def export_invoice_monthly(engine: Engine, as_of: date) -> pd.DataFrame:
+    return pd.read_sql(
+        text(
+            """
+            SELECT
+                date_trunc('month', issue_date)::date AS month,
+                sum(foreign_total_amount) AS total_usd,
+                sum(total_amount_ars) AS total_amount_ars,
+                count(*) AS invoice_count
+            FROM gold.export_invoices
+            WHERE issue_date >= (
+                date_trunc('month', cast(:as_of AS date))
+                - interval '11 months'
+            )
+              AND issue_date <= cast(:as_of AS date)
+            GROUP BY 1
+            ORDER BY 1
+            """
+        ),
+        engine,
+        params={"as_of": as_of},
+    )
+
+
+def export_invoices(
+    engine: Engine,
+    start_date: date,
+    end_date: date,
+) -> pd.DataFrame:
+    return pd.read_sql(
+        text(
+            """
+            SELECT
+                invoice_id,
+                invoice_key,
+                issue_date,
+                payment_date,
+                foreign_currency,
+                foreign_total_amount,
+                exchange_rate,
+                total_amount_ars,
+                cae,
+                cae_due_date
+            FROM gold.export_invoices
+            WHERE issue_date BETWEEN :start_date AND :end_date
+            ORDER BY issue_date DESC, invoice_key DESC
+            """
+        ),
+        engine,
+        params={"start_date": start_date, "end_date": end_date},
+    )
+
+
 def document_filter_options(
     engine: Engine,
     start_date: date,

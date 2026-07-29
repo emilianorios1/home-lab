@@ -19,13 +19,14 @@ SIAT TGI ───► boleta PDF ────────┘
 
 - **Bronze** conserva fuentes reproducibles: movimientos originales, mensajes,
   adjuntos, texto extraído y resultados versionados del parser.
-- **Silver** normaliza movimientos, documentos, facturas, vencimientos,
-  conceptos y consumos de tarjetas.
+- **Silver** normaliza movimientos, documentos, obligaciones, Facturas E
+  emitidas, vencimientos, conceptos y consumos de tarjetas.
 - **Gold** disponibiliza movimientos, obligaciones, documentos, gastos y
   candidatos de conciliación listos para consultar.
 
-Una factura es una obligación y no un movimiento realizado. Gold conserva esa
-separación y reconcilia ambas entidades de forma explícita.
+Una factura recibida es una obligación y no un movimiento realizado. Una
+Factura E emitida es una venta y tampoco demuestra por sí sola que haya sido
+cobrada. Gold conserva separadas esas entidades y los movimientos de efectivo.
 
 ## Documentos y trazabilidad
 

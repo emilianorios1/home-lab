@@ -13,19 +13,21 @@ select
     d.parser_name,
     d.parser_version,
     d.error_message,
-    i.document_type,
-    i.issuer,
+    coalesce(i.document_type, e.document_type) as document_type,
+    coalesce(i.issuer, e.issuer) as issuer,
     i.unit,
-    i.period,
-    i.issue_date,
+    coalesce(i.period, e.period) as period,
+    coalesce(i.issue_date, e.issue_date) as issue_date,
     i.first_due_date,
     i.first_due_amount,
     i.second_due_date,
     i.second_due_amount,
     i.due_date_kind,
-    i.total_amount,
-    i.foreign_total_amount,
-    i.foreign_currency,
+    coalesce(i.total_amount, e.total_amount_ars) as total_amount,
+    coalesce(i.foreign_total_amount, e.foreign_total_amount)
+        as foreign_total_amount,
+    coalesce(i.foreign_currency, e.foreign_currency) as foreign_currency,
     i.minimum_payment
 from {{ ref('silver_documents') }} d
 left join {{ ref('silver_invoices') }} i using (document_id)
+left join {{ ref('gold_export_invoices') }} e using (document_id)

@@ -102,9 +102,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     local_parser = subparsers.add_parser(
         "import-document",
-        help="Import a local PDF using the document pipeline",
+        help="Import local PDFs, parse them and rebuild analytics",
     )
-    local_parser.add_argument("pdf_path", type=Path)
+    local_parser.add_argument("pdf_paths", nargs="+", type=Path)
 
     import_parser = subparsers.add_parser(
         "import-account-statement", help="Import one Mercado Pago account statement CSV"
@@ -178,12 +178,18 @@ def main() -> int:
         return int(result.failed > 0)
 
     if args.command == "import-document":
-        result = import_local_pdf(args.pdf_path)
-        parsed = parse_pending_documents()
+        results = [import_local_pdf(path) for path in args.pdf_paths]
+        parsed = parse_pending_documents(
+            tuple(result.message_id for result in results)
+        )
+        if not run_transform():
+            logging.error("Documents imported, but dbt transformation failed")
+            return 1
         logging.info(
-            "Local document %s loaded=%s; parsed=%s unsupported=%s failed=%s",
-            result.message_id,
-            result.attachment_loaded,
+            "Local documents requested=%s loaded=%s; "
+            "parsed=%s unsupported=%s failed=%s",
+            len(results),
+            sum(result.attachment_loaded for result in results),
             parsed.parsed,
             parsed.unsupported,
             parsed.failed,

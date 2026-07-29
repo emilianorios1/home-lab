@@ -258,7 +258,9 @@ def import_local_pdf(path: Path) -> LocalImportResult:
     return LocalImportResult(message_id, loaded)
 
 
-def parse_pending_documents() -> ParseResult:
+def parse_pending_documents(
+    message_ids: tuple[str, ...] = (),
+) -> ParseResult:
     engine = get_engine()
     create_schema(engine)
     repository = GmailRepository(engine)
@@ -267,6 +269,7 @@ def parse_pending_documents() -> ParseResult:
     attachments = repository.pending_attachments(
         parser_name=registry.PARSER_NAME,
         parser_version=registry.PARSER_VERSION,
+        message_ids=message_ids,
     )
 
     for attachment in attachments:

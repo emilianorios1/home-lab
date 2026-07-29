@@ -15,6 +15,7 @@ DOCUMENT_TYPE_LABELS = {
     "condominium_expense": "Expensas",
     "credit_card_statement": "Resumen de tarjeta",
     "electricity_bill": "Luz",
+    "export_service_invoice": "Factura E",
     "gas_bill": "Gas",
     "property_tax_bill": "TGI",
     "water_bill": "Agua",

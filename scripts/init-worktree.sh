@@ -71,6 +71,10 @@ if ! grep -q '^DBT_POSTGRES_PORT=' "$env_file"; then
     echo "DBT_POSTGRES_PORT=${postgres_port}" >> "$env_file"
 fi
 
+# Create nested bind-mount targets as the worktree user before Docker can
+# create them as root. The host CLI also writes local document imports here.
+mkdir -p "${repo_root}/data/bronze/gmail"
+
 if [[ ! -x "${venv}/bin/python" ]]; then
     python3 -m venv "$venv"
 fi
