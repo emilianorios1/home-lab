@@ -75,6 +75,7 @@ En la pantalla **Gastos compartidos** se puede:
 - cargar o corregir el alquiler bruto informado por la inmobiliaria;
 - revisar el cálculo separado del alquiler;
 - identificar rápidamente servicios pendientes y sus vencimientos;
+- descargar el PDF de las expensas y de cada servicio desde su tarjeta;
 - copiar un resumen para compartir;
 - desplegar el detalle de facturas y conciliaciones.
 

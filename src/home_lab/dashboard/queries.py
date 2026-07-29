@@ -357,17 +357,32 @@ def monthly_shared_expenses(engine: Engine, month: date) -> dict[str, object]:
             text(
                 """
                 SELECT
-                    category,
-                    sum(expected_amount) AS expected_amount,
-                    sum(coalesce(paid_amount, 0)) AS paid_amount,
+                    items.category,
+                    sum(items.expected_amount) AS expected_amount,
+                    sum(coalesce(items.paid_amount, 0)) AS paid_amount,
                     count(*) AS bill_count,
-                    count(*) FILTER (WHERE payment_status = 'paid') AS paid_count,
-                    min(due_date) AS due_date,
-                    min(payment_date) AS payment_date,
-                    string_agg(DISTINCT issuer, ', ' ORDER BY issuer) AS issuer
-                FROM gold.shared_expense_items
-                WHERE summary_month = :month
-                GROUP BY category
+                    count(*) FILTER (WHERE items.payment_status = 'paid') AS paid_count,
+                    min(items.due_date) AS due_date,
+                    min(items.payment_date) AS payment_date,
+                    string_agg(
+                        DISTINCT items.issuer,
+                        ', ' ORDER BY items.issuer
+                    ) AS issuer,
+                    coalesce(
+                        jsonb_agg(
+                            DISTINCT jsonb_build_object(
+                                'document_id', documents.document_id,
+                                'original_filename', documents.original_filename,
+                                'storage_path', documents.storage_path
+                            )
+                        ) FILTER (WHERE documents.document_id IS NOT NULL),
+                        '[]'::jsonb
+                    ) AS documents
+                FROM gold.shared_expense_items items
+                LEFT JOIN gold.documents documents
+                    USING (document_id)
+                WHERE items.summary_month = :month
+                GROUP BY items.category
                 """
             ),
             {"month": month},
@@ -427,10 +442,18 @@ def monthly_shared_expenses(engine: Engine, month: date) -> dict[str, object]:
 
     def bill_values(
         category: str,
-    ) -> tuple[Decimal, Decimal, str, date | None, date | None, str | None]:
+    ) -> tuple[
+        Decimal,
+        Decimal,
+        str,
+        date | None,
+        date | None,
+        str | None,
+        list[dict[str, object]],
+    ]:
         bill = bills.get(category)
         if bill is None:
-            return Decimal("0"), Decimal("0"), "Sin factura", None, None, None
+            return Decimal("0"), Decimal("0"), "Sin factura", None, None, None, []
         expected = Decimal(bill.expected_amount)
         paid = Decimal(bill.paid_amount)
         if bill.paid_count == bill.bill_count:
@@ -439,7 +462,15 @@ def monthly_shared_expenses(engine: Engine, month: date) -> dict[str, object]:
             status = "Parcial"
         else:
             status = "Pendiente"
-        return expected, paid, status, bill.due_date, bill.payment_date, bill.issuer
+        return (
+            expected,
+            paid,
+            status,
+            bill.due_date,
+            bill.payment_date,
+            bill.issuer,
+            bill.documents,
+        )
 
     rows: list[dict[str, object]] = [
         {
@@ -465,7 +496,9 @@ def monthly_shared_expenses(engine: Engine, month: date) -> dict[str, object]:
         ("Gas", "Gas"),
         ("TGI", "TGI"),
     ):
-        expected, paid, status, due_date, payment_date, issuer = bill_values(category)
+        expected, paid, status, due_date, payment_date, issuer, documents = (
+            bill_values(category)
+        )
         expected_bills += expected
         paid_bills += paid
         services.append(
@@ -479,6 +512,7 @@ def monthly_shared_expenses(engine: Engine, month: date) -> dict[str, object]:
                 "pending_amount": max(expected - paid, Decimal("0")),
                 "payment_date": payment_date,
                 "status": status,
+                "documents": documents,
             }
         )
         row = {
