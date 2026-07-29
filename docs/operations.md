@@ -19,6 +19,18 @@ scripts/dev-up.sh
 y finalmente espera el healthcheck de Streamlit. El código de `src/` se monta en
 el contenedor y Streamlit recarga los cambios.
 
+En un worktree enlazado, inicializá una sola vez su entorno aislado antes de usar
+los mismos comandos:
+
+```bash
+scripts/init-worktree.sh
+scripts/dev-up.sh
+```
+
+La `.env` generada contiene credenciales y puertos exclusivos. Compose también
+separa el proyecto, la imagen, la red y el volumen PostgreSQL; `data/` y `.venv`
+pertenecen al propio worktree.
+
 Comandos cotidianos:
 
 ```bash

@@ -40,7 +40,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.dashboard
-    image: home-lab:dev
+    image: ${HOME_LAB_DEV_IMAGE:-home-lab:dev}
     environment:
       <<: *app-environment
     command:
@@ -70,7 +70,7 @@ services:
     init: true
 
   migrate:
-    image: home-lab:dev
+    image: ${HOME_LAB_DEV_IMAGE:-home-lab:dev}
     profiles: ["ops"]
     user: "${UID:-1000}:${GID:-1000}"
     environment:
@@ -83,7 +83,7 @@ services:
     init: true
 
   tools:
-    image: home-lab:dev
+    image: ${HOME_LAB_DEV_IMAGE:-home-lab:dev}
     profiles: ["ops"]
     user: "${UID:-1000}:${GID:-1000}"
     environment:
@@ -108,4 +108,4 @@ services:
 
 volumes:
   dev_postgres_data:
-    name: home-lab-dev-postgres-data
+    name: ${HOME_LAB_DEV_POSTGRES_VOLUME:-home-lab-dev-postgres-data}

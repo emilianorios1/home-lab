@@ -40,6 +40,19 @@ El dashboard de desarrollo queda en `http://localhost:8502` y su PostgreSQL en
 `127.0.0.1:5432`. Los datos financieros, documentos y secretos están excluidos de
 Git.
 
+Cada worktree puede levantar un entorno completamente aislado:
+
+```bash
+scripts/init-worktree.sh
+scripts/dev-up.sh
+.venv/bin/python -m pytest
+```
+
+El inicializador crea una `.env` y una `.venv` propias, con credenciales, puertos,
+imagen, red, volumen PostgreSQL y directorio de datos separados del checkout
+principal y de los demás worktrees. La URL asignada al dashboard se muestra al
+terminar `dev-up.sh`.
+
 Para instalar en esta notebook una producción persistente, disponible en la red
 local y administrada por systemd:
 
@@ -235,8 +248,10 @@ vencimientos independientes para permitir su conciliación con movimientos.
 El flujo reconoce los botones de descarga enviados por Aguas Santafesinas y
 Litoral Gas, decodifica localmente sus enlaces de seguimiento y sólo descarga
 desde los endpoints de facturación permitidos. El parser de ASSA publica las dos
-cuotas de la factura de agua; el de Litoral Gas publica su vencimiento único.
-Ambos extraen cliente, período, emisión, domicilio, consumo e importe.
+cuotas de la factura de agua y reconoce los reclamos de facturas vencidas como
+obligaciones de vencimiento único; el de Litoral Gas publica su vencimiento
+único. Ambos extraen cliente, período, emisión, domicilio, consumo cuando está
+disponible e importe.
 
 Para probar o recuperar un PDF local:
 

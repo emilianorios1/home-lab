@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from collections import Counter
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
 
 PARSER_NAME = "assa_water_bill"
-PARSER_VERSION = "1.0.0"
+PARSER_VERSION = "1.1.0"
 
 
 class AssaParseError(ValueError):
@@ -44,8 +45,7 @@ def _decimal(value: str) -> Decimal:
     return Decimal(compact.replace(".", "").replace(",", "."))
 
 
-def supports(text: str) -> bool:
-    normalized = _ascii_upper(text)
+def _supports_bill(normalized: str) -> bool:
     return (
         "PUNTO SUMINISTRO:" in normalized
         and "SERVICIO PRESTADO" in normalized
@@ -54,8 +54,77 @@ def supports(text: str) -> bool:
     )
 
 
+def _supports_overdue_notice(normalized: str) -> bool:
+    return (
+        "RECLAMO DE FACTURAS VENCIDAS" in normalized
+        and "VTO.ORIG." in normalized
+        and "IMP. TOTAL" in normalized
+    )
+
+
+def supports(text: str) -> bool:
+    normalized = _ascii_upper(text)
+    return _supports_bill(normalized) or _supports_overdue_notice(normalized)
+
+
+def _parse_overdue_notice(text: str) -> dict[str, Any]:
+    customer = _search(
+        r"RECLAMO\s+DE\s+FACTURAS\s+VENCIDAS\s*\n\s*0*(\d{6,10})\s*$",
+        text,
+        field="customer_number",
+    )
+    row = _search(
+        r"^\s*\d{4}-\d{8}\s+\S+\s+(20\d{2})/(\d{2})\s+"
+        r"(\d{2}/\d{2}/\d{4})\s+(?:[\d.,]+\s+){4}([\d.,]+)\s*$",
+        text,
+        field="overdue_invoice",
+    )
+    original_due_date = _date(row.group(3))
+    date_counts = Counter(
+        _date(value)
+        for value in re.findall(r"\b\d{2}/\d{2}/\d{4}\b", text)
+    )
+    notice_dates = sorted(
+        value
+        for value, count in date_counts.items()
+        if count >= 2 and value > original_due_date
+    )
+    if len(notice_dates) < 2:
+        raise AssaParseError("Missing required field: notice_dates")
+
+    address = re.search(
+        r"^Dir\.\s*Inmueble\s*:\s*([^\r\n]+)",
+        text,
+        flags=re.IGNORECASE | re.MULTILINE,
+    )
+    amount = _decimal(row.group(4))
+    return {
+        "schema_version": 1,
+        "document_type": "water_bill",
+        "issuer": "Aguas Santafesinas S.A.",
+        "unit": customer.group(1),
+        "customer_number": customer.group(1),
+        "supply_address": address.group(1).strip() if address else None,
+        "period": date(int(row.group(1)), int(row.group(2)), 1).isoformat(),
+        "issue_date": notice_dates[0].isoformat(),
+        "first_due_date": notice_dates[-1].isoformat(),
+        "first_due_amount": str(amount),
+        "second_due_date": None,
+        "second_due_amount": None,
+        "due_date_kind": "single",
+        "total_amount": str(amount),
+        "consumption_m3": None,
+        "previous_balance": None,
+        "collections": None,
+        "concepts": [],
+    }
+
+
 def parse(text: str) -> dict[str, Any]:
-    if not supports(text):
+    normalized = _ascii_upper(text)
+    if _supports_overdue_notice(normalized):
+        return _parse_overdue_notice(text)
+    if not _supports_bill(normalized):
         raise AssaParseError("Document is not a supported ASSA water bill")
 
     customer = _search(
