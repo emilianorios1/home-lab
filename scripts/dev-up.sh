@@ -5,7 +5,11 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 env_file="${repo_root}/.env"
 
 if [[ ! -f "$env_file" ]]; then
-    echo "Missing $env_file; copy .env.example to .env first" >&2
+    if [[ -f "${repo_root}/.git" ]]; then
+        echo "Missing $env_file; run scripts/init-worktree.sh first" >&2
+    else
+        echo "Missing $env_file; copy .env.example to .env first" >&2
+    fi
     exit 1
 fi
 
