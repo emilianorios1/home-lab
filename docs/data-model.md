@@ -22,12 +22,14 @@ silver.invoices
 silver.invoice_due_dates
 silver.invoice_line_items
 silver.credit_card_transactions
+silver.export_invoices
 
 gold.movements
 gold.bills
 gold.documents
 gold.movement_document_candidates
 gold.credit_card_expenses
+gold.export_invoices
 ```
 
 ## Obligaciones y movimientos
@@ -39,6 +41,11 @@ ventana razonable alrededor del vencimiento.
 Los consumos de tarjeta se publican en `gold.credit_card_expenses` y permanecen
 separados de `gold.movements`. Así se puede analizar cada compra sin duplicar el
 gasto cuando posteriormente se paga el resumen.
+
+Las Facturas E emitidas se normalizan en `silver.export_invoices` y se publican
+en `gold.export_invoices` con su importe original, tipo de cambio histórico y
+equivalente en pesos. No entran en `gold.bills`: son comprobantes de venta, no
+obligaciones del hogar ni prueba de cobro.
 
 Los comprobantes históricos que ya no estén disponibles en su fuente pueden
 registrarse localmente en `bronze.manual_shared_expenses`. Sus valores permanecen

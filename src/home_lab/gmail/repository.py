@@ -126,6 +126,7 @@ class GmailRepository:
         *,
         parser_name: str,
         parser_version: str,
+        message_ids: tuple[str, ...] = (),
     ) -> list[dict[str, Any]]:
         with self.engine.connect() as connection:
             rows = connection.execute(
@@ -133,7 +134,11 @@ class GmailRepository:
                     """
                     SELECT a.id, a.storage_path
                     FROM bronze.gmail_attachments a
-                    WHERE NOT EXISTS (
+                    WHERE (
+                        cast(:message_ids AS text[]) IS NULL
+                        OR a.message_id = ANY(cast(:message_ids AS text[]))
+                    )
+                      AND NOT EXISTS (
                         SELECT 1
                         FROM bronze.document_parse_results p
                         WHERE p.attachment_id = a.id
@@ -146,6 +151,7 @@ class GmailRepository:
                 {
                     "parser_name": parser_name,
                     "parser_version": parser_version,
+                    "message_ids": list(message_ids) or None,
                 },
             ).mappings()
             return [dict(row) for row in rows]

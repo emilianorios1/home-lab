@@ -28,3 +28,11 @@ def test_resolve_dbt_project_dir_from_checkout_when_installed(
     monkeypatch.chdir(checkout)
 
     assert cli.resolve_dbt_project_dir() == project_dir.resolve()
+
+
+def test_import_document_accepts_multiple_pdfs() -> None:
+    args = cli.build_parser().parse_args(
+        ["import-document", "invoice-1.pdf", "invoice-2.pdf"]
+    )
+
+    assert args.pdf_paths == [Path("invoice-1.pdf"), Path("invoice-2.pdf")]

@@ -23,12 +23,31 @@ El dashboard ofrece:
 - cálculo del alquiler neto descontando expensas extraordinarias;
 - conciliación entre facturas y pagos de Mercado Pago;
 - resumen y movimientos financieros;
+- Facturas E del mes y acumulado móvil de 12 meses;
 - documentos y facturas;
 - vencimientos e importes;
 - descarga del PDF original;
 - estado y errores de parsing.
 
 El almacenamiento documental se monta como sólo lectura dentro del contenedor.
+
+## Facturación E
+
+La pantalla **Facturación E** muestra el importe emitido durante el mes, el
+acumulado móvil de 12 meses y el detalle de comprobantes. Los totales en pesos
+usan el tipo de cambio guardado en cada PDF, sin recalcular facturas históricas.
+
+El límite anual no está fijado en el código porque ARCA lo actualiza. Para ver el
+porcentaje consumido y el margen disponible, configurá en `.env` el límite
+vigente de tu categoría:
+
+```dotenv
+MONOTRIBUTO_ANNUAL_LIMIT_ARS=valor-vigente
+```
+
+La pantalla es un control operativo y no reemplaza la verificación del límite y
+la categoría en ARCA o con un contador. Las facturas emitidas no se muestran
+como cobradas hasta que exista una conciliación de ingresos en una fase futura.
 
 ## Gastos compartidos
 

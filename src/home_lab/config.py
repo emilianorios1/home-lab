@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -77,4 +78,20 @@ def document_max_bytes() -> int:
     value = int(os.getenv("DOCUMENT_MAX_BYTES", str(20 * 1024 * 1024)))
     if value <= 0:
         raise ValueError("DOCUMENT_MAX_BYTES must be positive")
+    return value
+
+
+def monotributo_annual_limit_ars() -> Decimal | None:
+    load_dotenv()
+    raw = os.getenv("MONOTRIBUTO_ANNUAL_LIMIT_ARS", "").strip()
+    if not raw:
+        return None
+    try:
+        value = Decimal(raw)
+    except InvalidOperation as error:
+        raise ValueError(
+            "MONOTRIBUTO_ANNUAL_LIMIT_ARS must be a decimal number"
+        ) from error
+    if value <= 0:
+        raise ValueError("MONOTRIBUTO_ANNUAL_LIMIT_ARS must be positive")
     return value

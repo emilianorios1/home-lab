@@ -62,3 +62,12 @@ models:
                 values: [ARS, USD]
       - name: category
         data_tests: [not_null]
+  - name: gold_export_invoices
+    description: Facturas E listas para seguimiento mensual y anual.
+    columns:
+      - name: invoice_id
+        data_tests: [not_null, unique]
+      - name: invoice_key
+        data_tests: [not_null, unique]
+      - name: total_amount_ars
+        data_tests: [not_null]

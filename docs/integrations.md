@@ -201,8 +201,29 @@ Para probar o recuperar un PDF local:
 
 ```bash
 .venv/bin/home-lab import-document /ruta/al/documento.pdf
-.venv/bin/home-lab transform
 ```
+
+El comando admite varios PDF, los guarda de forma content-addressed, procesa los
+documentos pendientes y ejecuta `dbt build` una sola vez.
+
+### Factura E de ARCA
+
+Las Facturas E emitidas manualmente en ARCA se importan desde sus PDF:
+
+```bash
+.venv/bin/home-lab import-document \
+  /ruta/factura-1.pdf \
+  /ruta/factura-2.pdf
+```
+
+El parser `arca_export_service_invoice` acepta en este MVP comprobantes emitidos
+en USD y extrae número, fecha de emisión, fecha de pago declarada, importe, tipo
+de cambio, CAE y su vencimiento. El equivalente en pesos conserva la cotización
+incluida en cada comprobante.
+
+Las facturas emitidas se publican aparte de las obligaciones del hogar: emitir
+una Factura E no registra un cobro. El MVP tampoco emite comprobantes ni consulta
+servicios de ARCA.
 
 ### Naranja X
 
