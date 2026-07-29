@@ -54,7 +54,7 @@ No sobrescribas un `.env` existente. Para preparar un checkout nuevo:
 test -f .env || cp .env.example .env
 docker compose up -d postgres
 python3 -m venv .venv
-.venv/bin/pip install -e '.[dev]'
+.venv/bin/pip install --constraint requirements.lock -e '.[dev]'
 .venv/bin/home-lab init-db
 ```
 

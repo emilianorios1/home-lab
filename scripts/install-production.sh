@@ -52,6 +52,12 @@ install -m 0644 "${repo_root}/infra/systemd/home-lab-backup.service" \
     "${config_dir}/home-lab-backup.service"
 install -m 0644 "${repo_root}/infra/systemd/home-lab-backup.timer" \
     "${config_dir}/home-lab-backup.timer"
+install -m 0755 "${repo_root}/scripts/verify-production-backup.sh" \
+    "${config_dir}/verify-production-backup.sh"
+install -m 0644 "${repo_root}/infra/systemd/home-lab-backup-verify.service" \
+    "${config_dir}/home-lab-backup-verify.service"
+install -m 0644 "${repo_root}/infra/systemd/home-lab-backup-verify.timer" \
+    "${config_dir}/home-lab-backup-verify.timer"
 
 mkdir -p "${config_home}/systemd/user"
 ln -sfn "${config_dir}/home-lab-production.service" \
@@ -60,9 +66,16 @@ ln -sfn "${config_dir}/home-lab-backup.service" \
     "${config_home}/systemd/user/home-lab-backup.service"
 ln -sfn "${config_dir}/home-lab-backup.timer" \
     "${config_home}/systemd/user/home-lab-backup.timer"
+ln -sfn "${config_dir}/home-lab-backup-verify.service" \
+    "${config_home}/systemd/user/home-lab-backup-verify.service"
+ln -sfn "${config_dir}/home-lab-backup-verify.timer" \
+    "${config_home}/systemd/user/home-lab-backup-verify.timer"
 
 systemctl --user daemon-reload
-systemctl --user enable --now home-lab-production.service home-lab-backup.timer
+systemctl --user enable --now \
+    home-lab-production.service \
+    home-lab-backup.timer \
+    home-lab-backup-verify.timer
 
 if ! loginctl enable-linger "$USER" 2>/dev/null; then
     echo "Could not enable user lingering automatically." >&2

@@ -1,0 +1,11 @@
+[Unit]
+Description=Monthly home-lab production backup restore test
+
+[Timer]
+OnCalendar=monthly
+Persistent=true
+RandomizedDelaySec=2h
+Unit=home-lab-backup-verify.service
+
+[Install]
+WantedBy=timers.target
