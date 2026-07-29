@@ -59,6 +59,58 @@ def create_schema(engine: Engine) -> None:
         )
         """,
         """
+        CREATE TABLE IF NOT EXISTS bronze.financial_statements (
+            id UUID PRIMARY KEY,
+            provider TEXT NOT NULL,
+            account_key TEXT NOT NULL,
+            statement_type TEXT NOT NULL,
+            period_start DATE NOT NULL,
+            period_end DATE NOT NULL,
+            source_filename TEXT NOT NULL,
+            source_format TEXT NOT NULL,
+            source_sha256 TEXT NOT NULL,
+            storage_path TEXT NOT NULL,
+            byte_size BIGINT NOT NULL CHECK (byte_size >= 0),
+            initial_balance NUMERIC(18, 2) NOT NULL,
+            credits NUMERIC(18, 2) NOT NULL,
+            debits NUMERIC(18, 2) NOT NULL,
+            final_balance NUMERIC(18, 2) NOT NULL,
+            row_count INTEGER NOT NULL CHECK (row_count >= 0),
+            imported_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            CHECK (period_end >= period_start),
+            UNIQUE (
+                provider, account_key, statement_type, period_start, period_end
+            ),
+            UNIQUE (provider, account_key, source_sha256)
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS bronze.mercadopago_statement_movements (
+            id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+            statement_id UUID NOT NULL
+                REFERENCES bronze.financial_statements(id) ON DELETE CASCADE,
+            line_number INTEGER NOT NULL CHECK (line_number > 0),
+            release_date DATE NOT NULL,
+            transaction_type TEXT,
+            reference_id TEXT,
+            transaction_net_amount NUMERIC(18, 2) NOT NULL,
+            partial_balance NUMERIC(18, 2) NOT NULL,
+            UNIQUE (statement_id, line_number)
+        )
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS bronze.mercadopago_api_movements (
+            id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+            batch_id UUID NOT NULL
+                REFERENCES bronze.import_batches(id) ON DELETE CASCADE,
+            release_date DATE,
+            transaction_type TEXT,
+            reference_id TEXT,
+            transaction_net_amount NUMERIC(18, 2),
+            partial_balance NUMERIC(18, 2)
+        )
+        """,
+        """
         CREATE TABLE IF NOT EXISTS bronze.ingestion_runs (
             id UUID PRIMARY KEY,
             source TEXT NOT NULL,
@@ -141,6 +193,9 @@ def create_schema(engine: Engine) -> None:
         """,
         "CREATE INDEX IF NOT EXISTS mercadopago_account_statements_batch_id_idx ON raw.mercadopago_account_statements(batch_id)",
         "CREATE INDEX IF NOT EXISTS bronze_mercadopago_batch_id_idx ON bronze.mercadopago_account_statements(batch_id)",
+        "CREATE INDEX IF NOT EXISTS financial_statements_coverage_idx ON bronze.financial_statements(provider, account_key, period_start, period_end)",
+        "CREATE INDEX IF NOT EXISTS mercadopago_statement_movements_statement_idx ON bronze.mercadopago_statement_movements(statement_id)",
+        "CREATE INDEX IF NOT EXISTS mercadopago_api_movements_batch_idx ON bronze.mercadopago_api_movements(batch_id)",
         "CREATE INDEX IF NOT EXISTS gmail_attachments_sha256_idx ON bronze.gmail_attachments(sha256)",
         "CREATE INDEX IF NOT EXISTS document_parse_status_idx ON bronze.document_parse_results(status)",
         "CREATE INDEX IF NOT EXISTS manual_shared_expenses_month_idx ON bronze.manual_shared_expenses(summary_month)",

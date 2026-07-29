@@ -184,10 +184,11 @@ def main() -> int:
     if args.command == "import-account-statement":
         result = process(args.csv_path)
         logging.info(
-            "Imported %s rows from %s into batch %s",
+            "Imported %s rows from %s into statement %s (stored at %s)",
             result.row_count,
             result.source_filename,
-            result.batch_id,
+            result.statement_id,
+            result.storage_path,
         )
         return 0
 

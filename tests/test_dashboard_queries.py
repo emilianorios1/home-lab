@@ -1,3 +1,4 @@
+from collections.abc import Iterator
 from datetime import date
 from pathlib import Path
 
@@ -18,13 +19,35 @@ from home_lab.dashboard.queries import (
     shared_expense_months,
 )
 from home_lab.database import create_schema, get_engine
-from home_lab.mercadopago.importer import CSV_COLUMNS, process
+from home_lab.mercadopago.importer import (
+    CSV_COLUMNS,
+    process,
+    process_api_report,
+)
 
 
 @pytest.fixture(scope="module", autouse=True)
-def build_analytics_models() -> None:
-    create_schema(get_engine())
+def build_analytics_models(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> Iterator[None]:
+    engine = get_engine()
+    create_schema(engine)
+    source = tmp_path_factory.mktemp("dashboard") / "dashboard-statement.csv"
+    source.write_text(
+        "INITIAL_BALANCE;CREDITS;DEBITS;FINAL_BALANCE\n"
+        "0,00;100,00;-25,00;75,00\n\n"
+        + ";".join(CSV_COLUMNS)
+        + "\n01-06-2026;Transferencia recibida;dashboard-income;100,00;100,00\n"
+        + "02-06-2026;Pago Netflix;dashboard-netflix;-25,00;75,00\n"
+    )
+    statement = process(source, storage_root=source.parent / "statement-store")
     assert run_transform()
+    yield
+    with engine.begin() as connection:
+        connection.execute(
+            text("DELETE FROM bronze.financial_statements WHERE id = :id"),
+            {"id": statement.statement_id},
+        )
 
 
 def test_dashboard_queries_read_imported_account_statement() -> None:
@@ -60,7 +83,7 @@ def test_bled_cesar_adrian_expenses_are_rent(tmp_path: Path) -> None:
         + "\n15-07-2026;Transferencia enviada Bled Cesar Adrian;test-rent;-100,00;-100,00\n"
     )
     try:
-        process(source)
+        process(source, storage_root=tmp_path / "statement-store")
         data = movements(engine, date(2026, 7, 15), date(2026, 7, 15), "Bled Cesar Adrian")
         test_movement = data[data["reference_id"] == "test-rent"]
         assert len(test_movement) == 1
@@ -68,9 +91,83 @@ def test_bled_cesar_adrian_expenses_are_rent(tmp_path: Path) -> None:
     finally:
         with engine.begin() as connection:
             connection.execute(
-                text("DELETE FROM bronze.import_batches WHERE source_filename = :filename"),
+                text(
+                    """
+                    DELETE FROM bronze.financial_statements
+                    WHERE source_filename = :filename
+                    """
+                ),
                 {"filename": source.name},
             )
+
+
+def test_statement_replaces_api_rows_inside_its_period(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = get_engine()
+    api_filename = "mercadopago-api-coverage-test.csv"
+    api_content = (
+        b"SOURCE_ID;TRANSACTION_TYPE;TRANSACTION_AMOUNT;TRANSACTION_DATE\n"
+        b"coverage-api-id;WITHDRAWAL;-42.00;2026-08-12T03:00:00Z\n"
+    )
+    statement = tmp_path / "coverage-account-statement.csv"
+    statement.write_text(
+        "INITIAL_BALANCE;CREDITS;DEBITS;FINAL_BALANCE\n"
+        "100,00;0,00;-42,00;58,00\n\n"
+        + ";".join(CSV_COLUMNS)
+        + "\n12-08-2026;Transferencia enviada Comercio Descriptivo;"
+        "coverage-statement-id;-42,00;58,00\n"
+    )
+    monkeypatch.setenv(
+        "FINANCIAL_STATEMENT_STORE_PATH",
+        str(tmp_path / "statement-store"),
+    )
+
+    api_result = None
+    statement_result = None
+    try:
+        api_result = process_api_report(api_content, api_filename)
+        statement_result = process(statement)
+        with engine.connect() as connection:
+            canonical = connection.execute(
+                text(
+                    """
+                    SELECT source_origin, reference_id, description, amount
+                    FROM silver.movements
+                    WHERE release_date = date '2026-08-12'
+                      AND amount = -42.00
+                    """
+                )
+            ).mappings().all()
+        assert len(canonical) == 1
+        assert canonical[0]["source_origin"] == "statement"
+        assert canonical[0]["reference_id"] == "coverage-statement-id"
+        assert canonical[0]["description"] == (
+            "Transferencia enviada Comercio Descriptivo"
+        )
+    finally:
+        with engine.begin() as connection:
+            if statement_result is not None:
+                connection.execute(
+                    text(
+                        """
+                        DELETE FROM bronze.financial_statements
+                        WHERE id = :statement_id
+                        """
+                    ),
+                    {"statement_id": statement_result.statement_id},
+                )
+            if api_result is not None:
+                connection.execute(
+                    text(
+                        """
+                        DELETE FROM bronze.import_batches
+                        WHERE id = :batch_id
+                        """
+                    ),
+                    {"batch_id": api_result.batch_id},
+                )
 
 
 def test_monthly_shared_expenses_have_monthly_summary_shape() -> None:

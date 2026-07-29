@@ -6,6 +6,11 @@ models:
     columns:
       - name: source_movement_id
         data_tests: [not_null, unique]
+      - name: source_origin
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [statement, legacy_statement, api]
       - name: category
         data_tests:
           - not_null:

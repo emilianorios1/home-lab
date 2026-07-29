@@ -100,21 +100,48 @@ Ejemplo diario a las 06:30:
 30 6 * * * /home/emiliano/home-lab/scripts/sync-mercadopago.sh >> /home/emiliano/home-lab/data/mercadopago-sync.log 2>&1
 ```
 
-Repetir exactamente el mismo período reemplaza su lote anterior. Para un backfill,
-usá períodos sin superposición para no cargar dos veces los mismos movimientos.
-El formato oficial no incluye el saldo acumulado de cada fila, por lo que
-`running_balance` queda vacío para registros obtenidos por API; ingresos, egresos,
-flujo neto, categorías y conciliación siguen disponibles.
+Repetir exactamente el mismo período reemplaza su lote anterior. Los lotes API
+se guardan en `bronze.mercadopago_api_movements`. Los períodos superpuestos se
+desduplican en Silver por ID de operación y, cuando el ID no está disponible, por
+la firma y ocurrencia de la fila. El formato oficial no incluye el saldo acumulado
+de cada fila, por lo que `running_balance` queda vacío para registros obtenidos
+por API; ingresos, egresos, flujo neto, categorías y conciliación siguen
+disponibles.
 
-La importación manual anterior queda como herramienta de recuperación:
+El resumen de cuenta descargado manualmente se trata como un documento financiero
+cerrado, no como otro lote API:
 
 ```bash
 .venv/bin/home-lab import-account-statement data/raw/account_statement.csv
 .venv/bin/home-lab transform
 ```
 
-Las importaciones se escriben en `bronze`. Al inicializar una instalación existente,
-los lotes previos del esquema legado `raw` se copian sin eliminar el origen.
+El CSV original se conserva por contenido en
+`data/bronze/financial-statements/mercadopago/<año>/<mes>/`. Su metadata, período,
+saldos y hash quedan en `bronze.financial_statements`, y sus movimientos en
+`bronze.mercadopago_statement_movements`. Antes de persistirlo se valida que:
+
+- créditos y débitos coincidan con el encabezado;
+- saldo inicial más movimientos sea igual al saldo final;
+- cada movimiento reconcilie con su saldo acumulado.
+
+Si todos los movimientos pertenecen al mismo mes, la cobertura se expande al mes
+calendario completo. Dentro de esa cobertura Silver usa exclusivamente el
+statement manual, que aporta las descripciones y saldos definitivos. Las filas API
+se mantienen intactas en Bronze para auditoría, pero no aparecen duplicadas en
+Gold. Fuera de los períodos cerrados por statements, la API sigue aportando los
+movimientos más recientes.
+
+La ubicación de los documentos puede cambiarse con:
+
+```dotenv
+FINANCIAL_STATEMENT_STORE_PATH=/ruta/privada/financial-statements
+```
+
+Al inicializar una instalación existente, los lotes previos del esquema legado
+`raw` se copian sin eliminar el origen. Silver continúa leyendo la tabla histórica
+`bronze.mercadopago_account_statements` para mantener compatibilidad hasta que sus
+statements se vuelvan a importar como documentos.
 
 ## Configurar Gmail
 
@@ -260,6 +287,9 @@ Tablas y vistas principales:
 bronze.gmail_messages
 bronze.gmail_attachments
 bronze.document_parse_results
+bronze.financial_statements
+bronze.mercadopago_statement_movements
+bronze.mercadopago_api_movements
 bronze.mercadopago_account_statements
 
 silver.movements
