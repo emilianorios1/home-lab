@@ -9,7 +9,7 @@ from home_lab.documents.parsers import assa, epe, litoral_gas, naranja_x, tgi, z
 
 
 PARSER_NAME = "financial_document_router"
-PARSER_VERSION = "1.4.0"
+PARSER_VERSION = "1.5.0"
 
 
 class ParserModule(Protocol):

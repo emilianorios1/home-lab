@@ -192,10 +192,10 @@ El flujo reconoce los botones de descarga enviados por Aguas Santafesinas y
 Litoral Gas, decodifica localmente sus enlaces de seguimiento y sólo descarga
 desde los endpoints de facturación permitidos.
 
-El parser de ASSA publica las dos cuotas de la factura de agua y reconoce los
-reclamos de facturas vencidas como obligaciones de vencimiento único; el de
-Litoral Gas publica su vencimiento único. Ambos extraen cliente, período,
-emisión, domicilio, consumo cuando está disponible e importe.
+El parser de ASSA publica las dos cuotas de la factura de agua e ignora los
+reclamos de facturas vencidas; el de Litoral Gas publica su vencimiento único.
+Ambos extraen cliente, período, emisión, domicilio, consumo cuando está
+disponible e importe.
 
 Para probar o recuperar un PDF local:
 
