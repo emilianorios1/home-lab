@@ -79,7 +79,8 @@ En la pantalla **Gastos compartidos** se puede:
 - desplegar el detalle de facturas y conciliaciones.
 
 Los PDF originales se conservan en el almacenamiento documental. Se pueden
-buscar y descargar desde **Documentos y facturas**.
+buscar, filtrar por tipo, emisor o estado de procesamiento y descargar desde
+**Documentos y facturas**.
 
 ## Validación
 

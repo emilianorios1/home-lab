@@ -31,6 +31,19 @@ La `.env` generada contiene credenciales y puertos exclusivos. Compose también
 separa el proyecto, la imagen, la red y el volumen PostgreSQL; `data/` y `.venv`
 pertenecen al propio worktree.
 
+En el primer `dev-up.sh`, PostgreSQL toma un backup consistente de producción y
+lo restaura en el volumen aislado antes de ejecutar las migraciones y `dbt
+build` de la rama. Producción debe estar instalada y PostgreSQL debe estar en
+ejecución. Si no se puede obtener el snapshot, el arranque falla en vez de
+continuar con una base vacía.
+
+Los arranques posteriores reutilizan la base del worktree y no vuelven a copiar
+producción. Para obtener una foto nueva, creá un worktree nuevo. La copia
+contiene datos privados de producción: debe permanecer en su volumen Docker
+aislado y no debe exportarse, registrarse en logs ni incorporarse al repositorio.
+El snapshot incluye PostgreSQL, pero no copia los PDF ni otros archivos del
+almacenamiento documental de producción.
+
 Comandos cotidianos:
 
 ```bash

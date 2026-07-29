@@ -77,8 +77,10 @@ scripts/dev-up.sh
 
 El inicializador crea una `.env` y una `.venv` propias, con credenciales, puertos,
 imagen, red, volumen PostgreSQL y directorio de datos separados del checkout
-principal y de los demás worktrees. La URL asignada al dashboard se muestra al
-terminar `dev-up.sh`.
+principal y de los demás worktrees. En el primer `dev-up.sh`, la base aislada se
+inicializa con un backup tomado de producción en ese momento y luego se aplican
+el esquema y los modelos dbt de la rama. La URL asignada al dashboard se muestra
+al terminar.
 
 ## Flujos habituales
 
