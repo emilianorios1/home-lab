@@ -104,9 +104,14 @@ class GmailRepository:
                         message_id, attachment_id, original_filename,
                         mime_type, byte_size, sha256, storage_path
                     )
-                    VALUES (
+                    SELECT
                         :message_id, :attachment_id, :original_filename,
                         :mime_type, :byte_size, :sha256, :storage_path
+                    WHERE NOT EXISTS (
+                        SELECT 1
+                        FROM bronze.gmail_attachments
+                        WHERE message_id = :message_id
+                          AND sha256 = :sha256
                     )
                     ON CONFLICT (message_id, attachment_id) DO NOTHING
                     RETURNING id
