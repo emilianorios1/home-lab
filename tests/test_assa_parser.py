@@ -64,19 +64,10 @@ def test_parses_assa_water_bill() -> None:
     assert Decimal(result["consumption_m3"]) == Decimal("25.76")
 
 
-def test_parses_assa_overdue_notice() -> None:
-    assert supports(OVERDUE_NOTICE_TEXT)
-    result = parse(OVERDUE_NOTICE_TEXT)
-    assert result["document_type"] == "water_bill"
-    assert result["customer_number"] == "123456"
-    assert result["period"] == "2026-03-01"
-    assert result["issue_date"] == "2026-07-05"
-    assert result["first_due_date"] == "2026-07-13"
-    assert Decimal(result["first_due_amount"]) == Decimal("1121.00")
-    assert result["second_due_date"] is None
-    assert result["due_date_kind"] == "single"
-    assert Decimal(result["total_amount"]) == Decimal("1121.00")
-    assert result["consumption_m3"] is None
+def test_rejects_assa_overdue_notice() -> None:
+    assert not supports(OVERDUE_NOTICE_TEXT)
+    with pytest.raises(AssaParseError, match="not a supported"):
+        parse(OVERDUE_NOTICE_TEXT)
 
 
 def test_rejects_unrelated_document() -> None:
