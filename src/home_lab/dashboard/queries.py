@@ -391,7 +391,7 @@ def monthly_shared_expenses(engine: Engine, month: date) -> dict[str, object]:
     expected_bills = Decimal("0")
     paid_bills = Decimal("0")
     for category, label in (
-        ("Expensas", "Expensas a pagar"),
+        ("Expensas", "Expensas totales"),
         ("Luz", "Luz"),
         ("Agua", "Agua"),
         ("Gas", "Gas"),

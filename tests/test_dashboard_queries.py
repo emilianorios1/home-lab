@@ -182,7 +182,7 @@ def test_monthly_shared_expenses_have_monthly_summary_shape() -> None:
     assert list(rows["concept"]) == [
         "Alquiler bruto",
         "Expensas extraordinarias",
-        "Expensas a pagar",
+        "Expensas totales",
         "Alquiler a pagar",
         "Luz",
         "Agua",
