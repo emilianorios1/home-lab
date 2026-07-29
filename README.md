@@ -13,7 +13,7 @@ SIAT TGI ───► boleta PDF ────────┘
                                                           │          │
                                                           └────┬─────┘
                                                                ▼
-                                                    Streamlit (solo lectura)
+                                           Streamlit (consultas + carga manual)
 ```
 
 - **Bronze** conserva fuentes reproducibles: movimientos originales, mensajes,
@@ -347,8 +347,9 @@ en PostgreSQL y no se versionan en Git.
 
 El resumen mensual reúne las obligaciones del hogar y los movimientos usados para
 pagarlas. Las facturas de Expensas, Luz, Agua, Gas y TGI entran en el mes de su
-vencimiento; el alquiler entra en el mes en que aparece el movimiento categorizado
-como `Alquiler` en Mercado Pago.
+vencimiento. El alquiler bruto se carga para cada mes en el dashboard y el
+movimiento categorizado como `Alquiler` en Mercado Pago se usa para comprobar el
+pago.
 
 El cálculo conserva separadas las obligaciones y los pagos:
 
@@ -379,6 +380,7 @@ del mismo resumen sin guardar importes personales en el repositorio.
 En la pantalla **Gastos compartidos** se puede:
 
 - elegir el mes y ver el total, la parte de cada persona y el progreso de pago;
+- cargar o corregir el alquiler bruto informado por la inmobiliaria;
 - revisar el cálculo separado del alquiler;
 - identificar rápidamente servicios pendientes y sus vencimientos;
 - copiar un resumen para compartir por WhatsApp;
