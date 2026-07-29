@@ -243,6 +243,9 @@ def download_linked_pdf(url: str, max_bytes: int) -> bytes:
     expected_kind = _invoice_kind(url)
     if expected_kind is None:
         raise ValueError("Linked PDF URL is not an allow-listed invoice endpoint")
+    parsed = urlparse(url)
+    if expected_kind == "epe" and parsed.scheme == "http":
+        url = parsed._replace(scheme="https").geturl()
     user_agent = (
         "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
         "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
