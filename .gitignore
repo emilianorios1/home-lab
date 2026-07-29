@@ -1,5 +1,6 @@
 # Local configuration
 .env
+.env.production
 .venv/
 __pycache__/
 .pytest_cache/
@@ -15,6 +16,7 @@ data/bronze/*
 !data/bronze/.gitkeep
 data/*.lock
 data/*.log
+backups/
 secrets/
 
 # Local editor and operating-system files

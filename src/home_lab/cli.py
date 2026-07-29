@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -24,7 +25,12 @@ from home_lab.mercadopago.pipeline import (
 from home_lab.siat.pipeline import sync_tgi
 
 
-DBT_PROJECT_DIR = Path(__file__).resolve().parents[2] / "dbt"
+DBT_PROJECT_DIR = Path(
+    os.getenv(
+        "HOME_LAB_DBT_PROJECT_DIR",
+        str(Path(__file__).resolve().parents[2] / "dbt"),
+    )
+).resolve()
 ARGENTINA_TIMEZONE = ZoneInfo("America/Argentina/Buenos_Aires")
 
 

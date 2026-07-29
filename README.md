@@ -27,19 +27,33 @@ guarda su ruta relativa, SHA-256, tamaño, tipo y trazabilidad. Un correo se ded
 por `message_id`, un adjunto por `message_id + attachment_id` y un documento por su
 hash.
 
-## Puesta en marcha
+## Entornos y puesta en marcha
 
-Copiá la configuración y levantá PostgreSQL:
+El repositorio separa por completo desarrollo y producción. Para desarrollar:
 
 ```bash
 cp .env.example .env
-docker compose up -d postgres
-python3 -m venv .venv
-.venv/bin/pip install -e '.[dev]'
-.venv/bin/home-lab init-db
+scripts/dev-up.sh
 ```
 
-Los datos financieros, documentos y secretos están excluidos de Git.
+El dashboard de desarrollo queda en `http://localhost:8502` y su PostgreSQL en
+`127.0.0.1:5432`. Los datos financieros, documentos y secretos están excluidos de
+Git.
+
+Para instalar en esta notebook una producción persistente, disponible en la red
+local y administrada por systemd:
+
+```bash
+scripts/install-production.sh
+```
+
+Producción queda en el puerto `8501`, usa credenciales, red y volumen propios,
+realiza backups diarios y vuelve a arrancar con la notebook. Cada push a `main`
+pasa tests de Python y dbt, publica una imagen inmutable en GHCR y la despliega
+mediante un runner self-hosted local.
+
+La guía completa —operación, logs, ingestas, backups, restauración y configuración
+del runner— está en [`docs/operations.md`](docs/operations.md).
 
 ## Configurar Mercado Pago
 

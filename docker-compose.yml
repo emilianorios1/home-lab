@@ -1,3 +1,22 @@
+name: home-lab-dev
+
+x-app-environment: &app-environment
+  DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+  DBT_POSTGRES_HOST: postgres
+  DBT_POSTGRES_PORT: "5432"
+  POSTGRES_DB: ${POSTGRES_DB}
+  POSTGRES_USER: ${POSTGRES_USER}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+  DOCUMENT_STORE_PATH: /data/bronze/gmail
+  FINANCIAL_STATEMENT_STORE_PATH: /data/bronze/financial-statements
+  HOME_LAB_DBT_PROJECT_DIR: /workspace/dbt
+  PYTHONPATH: /workspace/src
+
+x-app-volumes: &app-volumes
+  - ./src:/workspace/src:ro
+  - ./dbt:/workspace/dbt:rw
+  - ./data:/data:rw
+
 services:
   postgres:
     image: postgres:17-alpine
@@ -6,34 +25,87 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
-      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:${HOME_LAB_DEV_POSTGRES_PORT:-5432}:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - dev_postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
-      interval: 5s
+      interval: 3s
       timeout: 5s
-      retries: 10
+      retries: 20
+    restart: unless-stopped
+    stop_grace_period: 30s
 
   dashboard:
     build:
       context: .
       dockerfile: Dockerfile.dashboard
+    image: home-lab:dev
     environment:
-      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      DOCUMENT_STORE_PATH: /data/gmail
+      <<: *app-environment
+    command:
+      - streamlit
+      - run
+      - /workspace/src/home_lab/dashboard/app.py
+      - --server.address=0.0.0.0
+      - --server.port=8501
+      - --server.runOnSave=true
     ports:
-      - "8501:8501"
-    volumes:
-      - ./data/bronze/gmail:/data/gmail:ro
+      - "127.0.0.1:${HOME_LAB_DEV_DASHBOARD_PORT:-8502}:8501"
+    volumes: *app-volumes
     depends_on:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "python", "-c", "from urllib.request import urlopen; urlopen('http://localhost:8501/_stcore/health')"]
+      test:
+        - CMD
+        - python
+        - -c
+        - "from urllib.request import urlopen; urlopen('http://localhost:8501/_stcore/health', timeout=3)"
       interval: 10s
       timeout: 5s
-      retries: 10
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+    init: true
+
+  migrate:
+    image: home-lab:dev
+    profiles: ["ops"]
+    user: "${UID:-1000}:${GID:-1000}"
+    environment:
+      <<: *app-environment
+    command: ["sh", "-ec", "home-lab init-db && home-lab transform"]
+    volumes: *app-volumes
+    depends_on:
+      postgres:
+        condition: service_healthy
+    init: true
+
+  tools:
+    image: home-lab:dev
+    profiles: ["ops"]
+    user: "${UID:-1000}:${GID:-1000}"
+    environment:
+      <<: *app-environment
+      GMAIL_CLIENT_SECRET_PATH: /secrets/gmail_client_secret.json
+      GMAIL_TOKEN_PATH: /secrets/gmail_token.json
+      GMAIL_QUERY: ${GMAIL_QUERY:-}
+      DOCUMENT_MAX_BYTES: ${DOCUMENT_MAX_BYTES:-20971520}
+      SIAT_TGI_ACCOUNT: ${SIAT_TGI_ACCOUNT:-}
+      SIAT_TGI_MANAGEMENT_CODE: ${SIAT_TGI_MANAGEMENT_CODE:-}
+      MERCADOPAGO_ACCESS_TOKEN: ${MERCADOPAGO_ACCESS_TOKEN:-}
+    entrypoint: ["home-lab"]
+    volumes:
+      - ./src:/workspace/src:ro
+      - ./dbt:/workspace/dbt:rw
+      - ./data:/data:rw
+      - ./secrets:/secrets:rw
+    depends_on:
+      postgres:
+        condition: service_healthy
+    init: true
 
 volumes:
-  postgres_data:
+  dev_postgres_data:
+    name: home-lab-dev-postgres-data

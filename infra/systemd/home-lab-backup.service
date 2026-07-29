@@ -1,0 +1,8 @@
+[Unit]
+Description=Backup home-lab production PostgreSQL
+Requires=home-lab-production.service
+After=home-lab-production.service
+
+[Service]
+Type=oneshot
+ExecStart=%h/.config/home-lab/backup-production.sh

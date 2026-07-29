@@ -1,5 +1,9 @@
 .git
+.github
 .env
+.env.*
+!.env.example
+!.env.production.example
 .venv
 .pytest_cache
 __pycache__
@@ -7,4 +11,6 @@ __pycache__
 *.egg-info/
 dbt/logs
 dbt/target
-data/raw
+data
+secrets
+worktrees
