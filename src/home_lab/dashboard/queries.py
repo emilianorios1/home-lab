@@ -237,12 +237,35 @@ def credit_card_statements(
     )
 
 
+def document_filter_options(
+    engine: Engine,
+    start_date: date,
+    end_date: date,
+) -> pd.DataFrame:
+    return pd.read_sql(
+        text(
+            """
+            SELECT DISTINCT document_type, issuer, parse_status
+            FROM gold.documents
+            WHERE coalesce(issue_date, received_at::date)
+                  BETWEEN :start_date AND :end_date
+            """
+        ),
+        engine,
+        params={"start_date": start_date, "end_date": end_date},
+    )
+
+
 def documents(
     engine: Engine,
     start_date: date,
     end_date: date,
     search: str = "",
     limit: int = 200,
+    *,
+    document_types: tuple[str, ...] = (),
+    issuers: tuple[str, ...] = (),
+    parse_statuses: tuple[str, ...] = (),
 ) -> pd.DataFrame:
     return pd.read_sql(
         text(
@@ -257,6 +280,7 @@ def documents(
                 first_due_amount,
                 second_due_date,
                 second_due_amount,
+                document_type,
                 parse_status,
                 original_filename,
                 storage_path,
@@ -271,6 +295,18 @@ def documents(
                   OR coalesce(original_filename, '') ILIKE :search_pattern
                   OR coalesce(unit, '') ILIKE :search_pattern
               )
+              AND (
+                  cast(:document_types AS text[]) IS NULL
+                  OR document_type = ANY(cast(:document_types AS text[]))
+              )
+              AND (
+                  cast(:issuers AS text[]) IS NULL
+                  OR issuer = ANY(cast(:issuers AS text[]))
+              )
+              AND (
+                  cast(:parse_statuses AS text[]) IS NULL
+                  OR parse_status = ANY(cast(:parse_statuses AS text[]))
+              )
             ORDER BY coalesce(issue_date, received_at::date) DESC, document_id DESC
             LIMIT :limit
             """
@@ -281,6 +317,9 @@ def documents(
             "end_date": end_date,
             "search": search.strip(),
             "search_pattern": f"%{search.strip()}%",
+            "document_types": list(document_types) or None,
+            "issuers": list(issuers) or None,
+            "parse_statuses": list(parse_statuses) or None,
             "limit": limit,
         },
     )

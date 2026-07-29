@@ -2,13 +2,29 @@
 
 from __future__ import annotations
 
-import streamlit as st
 import pandas as pd
+import streamlit as st
 
 from home_lab.config import document_store_path
-from home_lab.dashboard.queries import documents
+from home_lab.dashboard.queries import document_filter_options, documents
 from home_lab.database import get_engine
 from home_lab.documents.storage import resolve_document_path
+
+
+DOCUMENT_TYPE_LABELS = {
+    "condominium_expense": "Expensas",
+    "credit_card_statement": "Resumen de tarjeta",
+    "electricity_bill": "Luz",
+    "gas_bill": "Gas",
+    "property_tax_bill": "TGI",
+    "water_bill": "Agua",
+}
+PARSE_STATUS_LABELS = {
+    "failed": "Con error",
+    "parsed": "Parseado",
+    "pending": "Pendiente",
+    "unsupported": "No soportado",
+}
 
 
 def ars(value: object) -> str:
@@ -26,7 +42,32 @@ search = st.text_input(
     "Buscar documento",
     placeholder="Ej.: CONCORDE, 04-02 o nombre de archivo",
 )
-data = documents(engine, start_date, end_date, search)
+options = document_filter_options(engine, start_date, end_date)
+document_type_options = sorted(options["document_type"].dropna().unique())
+issuer_options = sorted(options["issuer"].dropna().unique())
+parse_status_options = sorted(options["parse_status"].dropna().unique())
+
+type_column, issuer_column, status_column = st.columns(3)
+document_types = type_column.multiselect(
+    "Tipo",
+    document_type_options,
+    format_func=lambda value: DOCUMENT_TYPE_LABELS.get(value, value),
+)
+issuers = issuer_column.multiselect("Emisor", issuer_options)
+parse_statuses = status_column.multiselect(
+    "Estado",
+    parse_status_options,
+    format_func=lambda value: PARSE_STATUS_LABELS.get(value, value),
+)
+data = documents(
+    engine,
+    start_date,
+    end_date,
+    search,
+    document_types=tuple(document_types),
+    issuers=tuple(issuers),
+    parse_statuses=tuple(parse_statuses),
+)
 
 parsed_count = int((data["parse_status"] == "parsed").sum()) if not data.empty else 0
 failed_count = int((data["parse_status"] == "failed").sum()) if not data.empty else 0
@@ -48,6 +89,7 @@ visible_columns = [
     "first_due_amount",
     "second_due_date",
     "second_due_amount",
+    "document_type",
     "parse_status",
     "original_filename",
 ]

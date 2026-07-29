@@ -151,8 +151,17 @@ profiles. It requires the configured local PostgreSQL instance.
   2. Create a short, filesystem-safe task slug.
   3. Create a new branch named `codex/<slug>` and a linked worktree at
      `../worktrees/home-lab/<slug>`, based on the current `HEAD`.
-  4. Perform every file modification and all task-specific validation from that
+  4. From the new worktree, run `scripts/init-worktree.sh` before any test,
+     Compose, or application command. This creates the worktree's isolated
+     `.env`, `.venv`, ports, Compose project, database volume, and data paths.
+     Do not copy another checkout's `.env` or run Compose with improvised
+     settings.
+  5. Perform every file modification and all task-specific validation from that
      worktree. Do not modify the primary checkout.
+- The first `scripts/dev-up.sh` in a linked worktree restores a current
+  production snapshot into its isolated PostgreSQL volume before migrations.
+  Treat that database as sensitive production-derived data: never print,
+  export, commit, or copy its contents into fixtures or logs.
 - Choose a unique slug if the intended branch or directory already exists.
 - Do not copy, stash, reset, clean, or otherwise alter uncommitted changes from
   the primary checkout unless the user explicitly asks.
