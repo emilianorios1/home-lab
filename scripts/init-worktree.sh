@@ -78,6 +78,8 @@ mkdir -p "${repo_root}/data/bronze/gmail"
 if [[ ! -x "${venv}/bin/python" ]]; then
     python3 -m venv "$venv"
 fi
-"${venv}/bin/pip" install -e "${repo_root}[dev]"
+"${venv}/bin/pip" install \
+    --constraint "${repo_root}/requirements.lock" \
+    --editable "${repo_root}[dev]"
 
 echo "Worktree ready. Start it with scripts/dev-up.sh"

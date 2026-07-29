@@ -1,0 +1,9 @@
+[Unit]
+Description=Verify a home-lab PostgreSQL backup by restoring it
+Requires=home-lab-production.service
+After=home-lab-production.service
+
+[Service]
+Type=oneshot
+ExecStart=%h/.config/home-lab/backup-production.sh
+ExecStart=%h/.config/home-lab/verify-production-backup.sh

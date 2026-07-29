@@ -53,7 +53,7 @@ docker compose logs -f dashboard
 
 # Ejecutar tests en el virtualenv local
 python3 -m venv .venv
-.venv/bin/pip install -e '.[dev]'
+.venv/bin/pip install --constraint requirements.lock -e '.[dev]'
 .venv/bin/pytest
 
 # Ejecutar una herramienta contra la base de desarrollo
@@ -80,7 +80,8 @@ El instalador:
 2. construye una imagen local;
 3. crea la base productiva, aplica el esquema y ejecuta `dbt build`;
 4. arranca el dashboard y espera su healthcheck;
-5. instala un servicio systemd de usuario y un backup diario;
+5. instala un servicio systemd de usuario, un backup diario y una prueba
+   mensual de restauración;
 6. intenta habilitar *lingering* para que siga activo sin una sesión abierta.
 
 Si el último paso necesita privilegios:
@@ -113,8 +114,9 @@ systemctl --user status home-lab-production.service
 ~/.config/home-lab/production-compose.sh run --rm tools sync-mercadopago
 ~/.config/home-lab/production-compose.sh run --rm tools sync-siat-tgi
 
-# Ver el calendario y ejecutar un backup ahora
+# Ver los calendarios y ejecutar un backup ahora
 systemctl --user list-timers home-lab-backup.timer
+systemctl --user list-timers home-lab-backup-verify.timer
 systemctl --user start home-lab-backup.service
 ```
 
@@ -134,6 +136,9 @@ Cada deploy productivo:
 
 Los logs Docker rotan a tres archivos de 10 MiB por servicio. Los backups se
 validan con `pg_restore --list` y se retienen 14 días de forma predeterminada.
+Una vez por mes, un backup nuevo también se restaura dentro de un PostgreSQL
+temporal sin red ni almacenamiento persistente. La comprobación sólo valida el
+esquema y no imprime datos.
 
 ### Restaurar un backup
 
@@ -162,9 +167,15 @@ Conviene hacerlo en una ventana de mantenimiento y volver a ejecutar el contened
 - tests de pytest;
 - validación de ambos Compose;
 - build completo de la imagen.
+- sintaxis de todos los scripts Bash.
 
 Un push a `main` publica en GHCR una imagen con SBOM y la despliega por digest, no
-por una etiqueta mutable.
+por una etiqueta mutable. El deploy comprueba además el digest efectivo del
+contenedor y el healthcheck a través del puerto publicado.
+
+Las dependencias Python están fijadas en `requirements.lock`; CI, los worktrees y
+la imagen productiva usan el mismo conjunto. Dependabot propone mensualmente las
+actualizaciones de Python y GitHub Actions.
 
 Para que GitHub pueda llegar a una notebook detrás de NAT hace falta registrar en
 este equipo un runner **self-hosted** del repositorio, instalarlo como servicio y
@@ -182,8 +193,15 @@ registro y el servicio se instalan de forma idempotente con:
 scripts/install-github-runner.sh
 ```
 
-El job usa el environment de GitHub `production`, de modo que se pueden agregar
-reglas de aprobación o restringir qué rama despliega sin cambiar el workflow.
+`main` está protegida: requiere pull request, el check `Tests, dbt and image`,
+conversaciones resueltas y una rama actualizada; no permite force-push ni borrado.
+No exige aprobación humana porque el repositorio tiene un único mantenedor. El
+environment `production` acepta únicamente despliegues desde `main`.
+
+El repositorio sólo permite Actions propias de GitHub y las tres Actions de
+Docker usadas por el workflow. Todas están fijadas a un commit completo. La
+exigencia global de SHA se habilita después de que este workflow llegue a `main`,
+para no invalidar ejecuciones del workflow anterior durante la transición.
 
 ## Chequeos rápidos
 

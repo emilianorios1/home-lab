@@ -49,6 +49,8 @@ install -m 0644 "$repo_root/compose.production.yaml" \
 install -m 0755 "$repo_root/scripts/production-compose.sh" "$compose_command"
 install -m 0755 "$repo_root/scripts/backup-production.sh" \
     "${config_dir}/backup-production.sh"
+install -m 0755 "$repo_root/scripts/verify-production-backup.sh" \
+    "${config_dir}/verify-production-backup.sh"
 
 umask 077
 new_env="$(mktemp "${config_dir}/deployment.env.XXXXXX")"
@@ -78,9 +80,6 @@ fi
 "$compose_command" run --rm migrate
 "$compose_command" up -d --wait --wait-timeout 180 --remove-orphans dashboard
 
-trap - ERR
-rm -f "$previous_env" "$previous_compose"
-
 env_value() {
     local key="$1"
     awk -v key="$key" '
@@ -90,4 +89,37 @@ env_value() {
 }
 production_bind="$(env_value HOME_LAB_PROD_BIND)"
 production_port="$(env_value HOME_LAB_PROD_PORT)"
+dashboard_container="$("$compose_command" ps -q dashboard)"
+running_image="$(docker inspect --format '{{.Config.Image}}' "$dashboard_container")"
+if [[ "$running_image" != "$image" ]]; then
+    echo "Dashboard is using $running_image instead of $image" >&2
+    exit 1
+fi
+
+health_host="${production_bind:-0.0.0.0}"
+if [[ "$health_host" == "0.0.0.0" || "$health_host" == "::" ]]; then
+    health_host="127.0.0.1"
+fi
+curl --fail --silent --show-error \
+    "http://${health_host}:${production_port:-8501}/_stcore/health" >/dev/null
+
+trap - ERR
+rm -f "$previous_env" "$previous_compose"
+
+systemd_user_dir="${config_home}/systemd/user"
+if [[ -e "${systemd_user_dir}/home-lab-production.service" ]]; then
+    install -m 0644 \
+        "$repo_root/infra/systemd/home-lab-backup-verify.service" \
+        "${config_dir}/home-lab-backup-verify.service"
+    install -m 0644 \
+        "$repo_root/infra/systemd/home-lab-backup-verify.timer" \
+        "${config_dir}/home-lab-backup-verify.timer"
+    ln -sfn "${config_dir}/home-lab-backup-verify.service" \
+        "${systemd_user_dir}/home-lab-backup-verify.service"
+    ln -sfn "${config_dir}/home-lab-backup-verify.timer" \
+        "${systemd_user_dir}/home-lab-backup-verify.timer"
+    systemctl --user daemon-reload
+    systemctl --user enable --now home-lab-backup-verify.timer
+fi
+
 echo "Production deployed with image $image at ${production_bind:-0.0.0.0}:${production_port:-8501}"
