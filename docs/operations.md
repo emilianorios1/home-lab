@@ -41,8 +41,8 @@ Los arranques posteriores reutilizan la base del worktree y no vuelven a copiar
 producción. Para obtener una foto nueva, creá un worktree nuevo. La copia
 contiene datos privados de producción: debe permanecer en su volumen Docker
 aislado y no debe exportarse, registrarse en logs ni incorporarse al repositorio.
-El snapshot incluye PostgreSQL, pero no copia los PDF ni otros archivos del
-almacenamiento documental de producción.
+El snapshot incluye PostgreSQL. Los PDF no se copian: el dashboard de desarrollo
+monta el almacenamiento documental de producción en modo sólo lectura.
 
 Comandos cotidianos:
 

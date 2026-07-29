@@ -16,6 +16,7 @@ x-app-volumes: &app-volumes
   - ./src:/workspace/src:ro
   - ./dbt:/workspace/dbt:rw
   - ./data:/data:rw
+  - ${HOME}/.local/share/home-lab/production/bronze/gmail:/data/bronze/gmail:ro
 
 services:
   postgres:
