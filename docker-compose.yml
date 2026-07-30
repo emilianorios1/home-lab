@@ -9,6 +9,7 @@ x-app-environment: &app-environment
   POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
   DOCUMENT_STORE_PATH: /data/bronze/gmail
   MONOTRIBUTO_ANNUAL_LIMIT_ARS: ${MONOTRIBUTO_ANNUAL_LIMIT_ARS:-}
+  AFIP_SDK_ACCESS_TOKEN: ${AFIP_SDK_ACCESS_TOKEN:-}
   FINANCIAL_STATEMENT_STORE_PATH: /data/bronze/financial-statements
   HOME_LAB_DBT_PROJECT_DIR: /workspace/dbt
   PYTHONPATH: /workspace/src

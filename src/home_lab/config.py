@@ -73,6 +73,11 @@ def mercadopago_access_token() -> str:
     return _required_setting("MERCADOPAGO_ACCESS_TOKEN")
 
 
+def afip_sdk_access_token() -> str | None:
+    load_dotenv()
+    return os.getenv("AFIP_SDK_ACCESS_TOKEN", "").strip() or None
+
+
 def document_max_bytes() -> int:
     load_dotenv()
     value = int(os.getenv("DOCUMENT_MAX_BYTES", str(20 * 1024 * 1024)))

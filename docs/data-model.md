@@ -15,6 +15,8 @@ bronze.mercadopago_statement_movements
 bronze.mercadopago_api_movements
 bronze.mercadopago_account_statements
 bronze.manual_monthly_rents
+bronze.export_invoice_emissions
+bronze.recurring_export_invoice_profile
 
 silver.movements
 silver.documents
@@ -46,6 +48,16 @@ Las Facturas E emitidas se normalizan en `silver.export_invoices` y se publican
 en `gold.export_invoices` con su importe original, tipo de cambio histórico y
 equivalente en pesos. No entran en `gold.bills`: son comprobantes de venta, no
 obligaciones del hogar ni prueba de cobro.
+
+`bronze.export_invoice_emissions` conserva únicamente las pruebas del sandbox
+WSFEX: borrador, ID, número asignado, payload, respuesta y estado. No almacena el
+access token ni el ticket de acceso. Las operaciones `dev` no alimentan
+Silver/Gold para evitar que un comprobante inválido fiscalmente contamine los
+controles reales.
+
+`bronze.recurring_export_invoice_profile` mantiene los campos que se repiten
+para un único salario recurrente. Fecha y tipo de cambio quedan fuera del perfil
+para su revisión antes de cada emisión.
 
 Los comprobantes históricos que ya no estén disponibles en su fuente pueden
 registrarse localmente en `bronze.manual_shared_expenses`. Sus valores permanecen
