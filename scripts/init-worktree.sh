@@ -35,6 +35,7 @@ if [[ ! -f "$env_file" ]]; then
     db_name="home_lab_${slug//-/_}"
     db_user="$db_name"
     db_password="$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')"
+    operations_password="$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')"
 
     umask 077
     {
@@ -48,6 +49,7 @@ if [[ ! -f "$env_file" ]]; then
         echo "POSTGRES_DB=${db_name}"
         echo "POSTGRES_USER=${db_user}"
         echo "POSTGRES_PASSWORD=${db_password}"
+        echo "HOME_LAB_OPERATIONS_PASSWORD=${operations_password}"
         echo "DATABASE_URL=postgresql+psycopg://${db_user}:${db_password}@127.0.0.1:${postgres_port}/${db_name}"
         echo "DOCUMENT_STORE_PATH=data/bronze/gmail"
         echo "FINANCIAL_STATEMENT_STORE_PATH=data/bronze/financial-statements"
@@ -70,10 +72,15 @@ fi
 if ! grep -q '^DBT_POSTGRES_PORT=' "$env_file"; then
     echo "DBT_POSTGRES_PORT=${postgres_port}" >> "$env_file"
 fi
+if ! grep -q '^HOME_LAB_OPERATIONS_PASSWORD=' "$env_file"; then
+    operations_password="$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')"
+    echo "HOME_LAB_OPERATIONS_PASSWORD=${operations_password}" >> "$env_file"
+fi
 
 # Create nested bind-mount targets as the worktree user before Docker can
 # create them as root. The host CLI also writes local document imports here.
-mkdir -p "${repo_root}/data/bronze/gmail"
+mkdir -p "${repo_root}/data/bronze/gmail" "${repo_root}/secrets"
+chmod 700 "${repo_root}/secrets"
 
 if [[ ! -x "${venv}/bin/python" ]]; then
     python3 -m venv "$venv"

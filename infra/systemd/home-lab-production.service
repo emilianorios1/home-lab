@@ -6,8 +6,8 @@ After=network-online.target
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=%h/.config/home-lab/production-compose.sh up -d --wait --wait-timeout 180 postgres dashboard
-ExecStop=%h/.config/home-lab/production-compose.sh stop -t 30 dashboard postgres
+ExecStart=%h/.config/home-lab/production-compose.sh up -d --wait --wait-timeout 180 postgres dashboard sync-runner
+ExecStop=%h/.config/home-lab/production-compose.sh stop -t 30 dashboard sync-runner postgres
 TimeoutStartSec=240
 TimeoutStopSec=90
 
