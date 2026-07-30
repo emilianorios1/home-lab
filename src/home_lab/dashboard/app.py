@@ -44,6 +44,7 @@ navigation = st.navigation(
         st.Page("pages/export_invoices.py", title="Facturación E", icon="🌎"),
         st.Page("pages/credit_cards.py", title="Tarjeta Naranja", icon="💳"),
         st.Page("pages/documents.py", title="Documentos", icon="📄"),
+        st.Page("pages/operations.py", title="Operaciones", icon="🔄"),
     ]
 )
 navigation.run()

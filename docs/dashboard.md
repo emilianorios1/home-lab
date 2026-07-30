@@ -1,8 +1,8 @@
 # Dashboard
 
 El dashboard Streamlit consulta los modelos Gold. Sus páginas de reporte son de
-sólo lectura; las escrituras se limitan a interfaces explícitas de carga manual
-que persisten sus datos en Bronze.
+sólo lectura; la carga manual y las sincronizaciones viven en interfaces
+explícitas de mantenimiento.
 
 ## Puesta en marcha
 
@@ -10,7 +10,7 @@ Construí Gold y levantá la aplicación:
 
 ```bash
 .venv/bin/home-lab transform
-docker compose up -d --build dashboard
+docker compose up -d --build dashboard sync-runner
 ```
 
 Abrí [http://localhost:8501](http://localhost:8501). Desde otro dispositivo de
@@ -29,8 +29,24 @@ El dashboard ofrece:
 - vencimientos e importes;
 - descarga del PDF original;
 - estado y errores de parsing.
+- sincronización manual de Gmail, Mercado Pago y TGI.
 
 El almacenamiento documental se monta como sólo lectura dentro del contenedor.
+
+## Operaciones
+
+La pantalla **Operaciones** permite ejecutar `sync-gmail`, `sync-mercadopago` y
+`sync-siat-tgi`. Cada comando importa su fuente y reconstruye Silver/Gold. Sólo
+puede ejecutarse uno por vez para evitar dos `dbt build` simultáneos.
+
+La pantalla requiere `HOME_LAB_OPERATIONS_PASSWORD`. La clave desbloquea las
+acciones durante la sesión actual del navegador; no se guarda en PostgreSQL. El
+runner no publica puertos al host y es el único de los dos servicios que recibe
+las credenciales externas, salida a Internet y escritura en `/data`.
+
+La primera versión espera el resultado dentro de la pantalla. Si el navegador
+se desconecta, el runner continúa; al intentar otra operación se informa que ya
+hay una sincronización en curso. No conserva historial de ejecuciones.
 
 ## Facturación E
 

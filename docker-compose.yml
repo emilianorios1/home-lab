@@ -14,11 +14,27 @@ x-app-environment: &app-environment
   HOME_LAB_DBT_PROJECT_DIR: /workspace/dbt
   PYTHONPATH: /workspace/src
 
+x-sync-environment: &sync-environment
+  <<: *app-environment
+  GMAIL_CLIENT_SECRET_PATH: /secrets/gmail_client_secret.json
+  GMAIL_TOKEN_PATH: /secrets/gmail_token.json
+  GMAIL_QUERY: ${GMAIL_QUERY:-}
+  DOCUMENT_MAX_BYTES: ${DOCUMENT_MAX_BYTES:-20971520}
+  SIAT_TGI_ACCOUNT: ${SIAT_TGI_ACCOUNT:-}
+  SIAT_TGI_MANAGEMENT_CODE: ${SIAT_TGI_MANAGEMENT_CODE:-}
+  MERCADOPAGO_ACCESS_TOKEN: ${MERCADOPAGO_ACCESS_TOKEN:-}
+
 x-app-volumes: &app-volumes
   - ./src:/workspace/src:ro
   - ./dbt:/workspace/dbt:rw
   - ./data:/data:rw
   - ${HOME}/.local/share/home-lab/production/bronze/gmail:/data/bronze/gmail:ro
+
+x-sync-volumes: &sync-volumes
+  - ./src:/workspace/src:ro
+  - ./dbt:/workspace/dbt:rw
+  - ./data:/data:rw
+  - ./secrets:/secrets:rw
 
 services:
   postgres:
@@ -46,6 +62,8 @@ services:
     image: ${HOME_LAB_DEV_IMAGE:-home-lab:dev}
     environment:
       <<: *app-environment
+      HOME_LAB_OPERATIONS_PASSWORD: ${HOME_LAB_OPERATIONS_PASSWORD:-}
+      HOME_LAB_SYNC_RUNNER_URL: http://sync-runner:8080
     command:
       - streamlit
       - run
@@ -72,6 +90,28 @@ services:
     restart: unless-stopped
     init: true
 
+  sync-runner:
+    image: ${HOME_LAB_DEV_IMAGE:-home-lab:dev}
+    user: "${UID:-1000}:${GID:-1000}"
+    environment: *sync-environment
+    command: ["python", "-m", "home_lab.sync_runner"]
+    volumes: *sync-volumes
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "from urllib.request import urlopen; urlopen('http://localhost:8080/health', timeout=3)"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+    restart: unless-stopped
+    init: true
+
   migrate:
     image: ${HOME_LAB_DEV_IMAGE:-home-lab:dev}
     profiles: ["ops"]
@@ -89,21 +129,9 @@ services:
     image: ${HOME_LAB_DEV_IMAGE:-home-lab:dev}
     profiles: ["ops"]
     user: "${UID:-1000}:${GID:-1000}"
-    environment:
-      <<: *app-environment
-      GMAIL_CLIENT_SECRET_PATH: /secrets/gmail_client_secret.json
-      GMAIL_TOKEN_PATH: /secrets/gmail_token.json
-      GMAIL_QUERY: ${GMAIL_QUERY:-}
-      DOCUMENT_MAX_BYTES: ${DOCUMENT_MAX_BYTES:-20971520}
-      SIAT_TGI_ACCOUNT: ${SIAT_TGI_ACCOUNT:-}
-      SIAT_TGI_MANAGEMENT_CODE: ${SIAT_TGI_MANAGEMENT_CODE:-}
-      MERCADOPAGO_ACCESS_TOKEN: ${MERCADOPAGO_ACCESS_TOKEN:-}
+    environment: *sync-environment
     entrypoint: ["home-lab"]
-    volumes:
-      - ./src:/workspace/src:ro
-      - ./dbt:/workspace/dbt:rw
-      - ./data:/data:rw
-      - ./secrets:/secrets:rw
+    volumes: *sync-volumes
     depends_on:
       postgres:
         condition: service_healthy

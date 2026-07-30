@@ -14,7 +14,10 @@ SIAT TGI ───► boleta PDF ────────┘
                                                           │          │
                                                           └────┬─────┘
                                                                ▼
-                                           Streamlit (consultas + carga manual)
+                         Streamlit (consultas + mantenimiento explícito)
+                                         │
+                                         ▼
+                              sync runner HTTP interno
 ```
 
 - **Bronze** conserva fuentes reproducibles y la trazabilidad de cada ingesta.
@@ -25,7 +28,8 @@ SIAT TGI ───► boleta PDF ────────┘
 
 Los PDF viven fuera de PostgreSQL en almacenamiento content-addressed. La base
 sólo guarda su metadata y trazabilidad. Las ingestas son idempotentes y las
-escrituras del dashboard se limitan a interfaces explícitas de carga manual.
+escrituras iniciadas desde el dashboard se limitan a interfaces explícitas de
+carga manual o sincronización.
 
 La explicación completa está en
 [`docs/architecture.md`](docs/architecture.md).
@@ -43,6 +47,7 @@ La explicación completa está en
 - Conciliación de obligaciones con pagos.
 - Resumen de gastos compartidos con carga manual del alquiler bruto.
 - Consulta de movimientos y documentos desde Streamlit.
+- Sincronización manual de Gmail, Mercado Pago y TGI desde el dashboard.
 
 La configuración y los comandos propios de cada fuente están en
 [`docs/integrations.md`](docs/integrations.md).
@@ -104,7 +109,7 @@ dashboard se muestra al terminar.
 .venv/bin/home-lab transform
 
 # Levantar el dashboard
-docker compose up -d --build dashboard
+docker compose up -d --build dashboard sync-runner
 ```
 
 Las sincronizaciones también tienen scripts preparados para cron y protegidos
@@ -117,7 +122,7 @@ Después de construir Gold y levantar la aplicación:
 
 ```bash
 .venv/bin/home-lab transform
-docker compose up -d --build dashboard
+docker compose up -d --build dashboard sync-runner
 ```
 
 Abrí [http://localhost:8501](http://localhost:8501). Desde otro dispositivo de
@@ -125,9 +130,11 @@ la red local, usá `http://<ip-local-de-la-pc>:8501`.
 
 La aplicación permite revisar movimientos, obligaciones, conciliaciones,
 documentos, vencimientos, Facturas E y gastos compartidos, además de cargar el
-alquiler bruto mensual. El laboratorio de Factura E está fijado a desarrollo y
-sus CAE de prueba no se mezclan con los totales reales. El almacenamiento
-documental se monta como sólo lectura dentro del contenedor.
+alquiler bruto mensual y ejecutar sincronizaciones desde **Operaciones**. El
+laboratorio de Factura E está fijado a desarrollo y sus CAE de prueba no se
+mezclan con los totales reales. El almacenamiento documental se monta como sólo
+lectura dentro del dashboard; un runner interno separado conserva las
+credenciales y los permisos de escritura.
 
 La lógica funcional y las pantallas están documentadas en
 [`docs/dashboard.md`](docs/dashboard.md).

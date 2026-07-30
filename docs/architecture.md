@@ -2,7 +2,8 @@
 
 `home-lab` integra actividad financiera y documentos del hogar en PostgreSQL,
 los transforma con dbt y los presenta en Streamlit. Las páginas de reporte son de
-sólo lectura y las escrituras se limitan a interfaces explícitas de carga manual.
+sólo lectura; la carga manual y las sincronizaciones viven en interfaces
+explícitas de mantenimiento.
 
 ```text
 Mercado Pago Reports API ───────┐
@@ -12,7 +13,10 @@ SIAT TGI ───► boleta PDF ────────┘
                                                           │          │
                                                           └────┬─────┘
                                                                ▼
-                                           Streamlit (consultas + carga manual)
+                         Streamlit (consultas + mantenimiento explícito)
+                                         │
+                                         ▼
+                              sync runner HTTP interno
 ```
 
 ## Capas de datos
@@ -52,6 +56,7 @@ src/home_lab/
 ├── cli.py
 ├── config.py
 ├── database.py
+├── sync_runner.py
 ├── gmail/
 │   ├── client.py
 │   ├── repository.py
@@ -74,8 +79,14 @@ pipeline. Las nuevas fuentes siguen esa estructura en lugar de concentrarse en
 paquetes genéricos.
 
 Las consultas del dashboard permanecen separadas de las interfaces explícitas de
-carga manual. Estas últimas persisten sus datos en Bronze para conservar
+mantenimiento. La carga manual persiste sus datos en Bronze para conservar
 trazabilidad.
+
+El dashboard tampoco recibe las credenciales de las fuentes ni escritura sobre
+el almacenamiento documental. La página **Operaciones** llama a un runner HTTP
+visible sólo dentro de la red Docker. El runner acepta únicamente Gmail, Mercado
+Pago y SIAT TGI, serializa sus ejecuciones y reutiliza los comandos existentes,
+que terminan con `dbt build`.
 
 El esquema legado `raw` se mantiene como camino de compatibilidad para
 instalaciones existentes. Su migración a Bronze es repetible y no elimina el

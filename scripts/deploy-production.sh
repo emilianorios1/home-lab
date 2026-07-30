@@ -33,6 +33,12 @@ if ! flock -n 9; then
     echo "Another production deployment is already running" >&2
     exit 1
 fi
+if ! grep -q '^HOME_LAB_OPERATIONS_PASSWORD=' "$prod_env"; then
+    operations_password="$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')"
+    umask 077
+    printf '\nHOME_LAB_OPERATIONS_PASSWORD=%s\n' "$operations_password" >> "$prod_env"
+    echo "Generated HOME_LAB_OPERATIONS_PASSWORD in $prod_env"
+fi
 
 had_previous=false
 if [[ -f "$deployment_env" ]]; then
@@ -64,7 +70,8 @@ rollback() {
         echo "Deployment failed; restoring the previously deployed image" >&2
         cp "$previous_env" "$deployment_env"
         cp "$previous_compose" "${config_dir}/compose.production.yaml"
-        "$compose_command" up -d --wait --wait-timeout 120 postgres dashboard || true
+        "$compose_command" up -d --wait --wait-timeout 120 \
+            --remove-orphans postgres dashboard || true
     fi
     exit "$status"
 }
@@ -73,12 +80,13 @@ trap rollback ERR
 "$compose_command" config --quiet
 
 if [[ "${HOME_LAB_SKIP_PULL:-0}" != "1" ]]; then
-    "$compose_command" pull postgres dashboard migrate
+    "$compose_command" pull postgres dashboard sync-runner migrate
 fi
 
 "$compose_command" up -d --wait --wait-timeout 120 postgres
 "$compose_command" run --rm migrate
-"$compose_command" up -d --wait --wait-timeout 180 --remove-orphans dashboard
+"$compose_command" up -d --wait --wait-timeout 180 --remove-orphans \
+    dashboard sync-runner
 
 env_value() {
     local key="$1"
@@ -95,6 +103,12 @@ if [[ "$running_image" != "$image" ]]; then
     echo "Dashboard is using $running_image instead of $image" >&2
     exit 1
 fi
+runner_container="$("$compose_command" ps -q sync-runner)"
+runner_image="$(docker inspect --format '{{.Config.Image}}' "$runner_container")"
+if [[ "$runner_image" != "$image" ]]; then
+    echo "Sync runner is using $runner_image instead of $image" >&2
+    exit 1
+fi
 
 health_host="${production_bind:-0.0.0.0}"
 if [[ "$health_host" == "0.0.0.0" || "$health_host" == "::" ]]; then
@@ -109,6 +123,9 @@ rm -f "$previous_env" "$previous_compose"
 systemd_user_dir="${config_home}/systemd/user"
 if [[ -e "${systemd_user_dir}/home-lab-production.service" ]]; then
     install -m 0644 \
+        "$repo_root/infra/systemd/home-lab-production.service" \
+        "${config_dir}/home-lab-production.service"
+    install -m 0644 \
         "$repo_root/infra/systemd/home-lab-backup-verify.service" \
         "${config_dir}/home-lab-backup-verify.service"
     install -m 0644 \
@@ -118,6 +135,8 @@ if [[ -e "${systemd_user_dir}/home-lab-production.service" ]]; then
         "${systemd_user_dir}/home-lab-backup-verify.service"
     ln -sfn "${config_dir}/home-lab-backup-verify.timer" \
         "${systemd_user_dir}/home-lab-backup-verify.timer"
+    ln -sfn "${config_dir}/home-lab-production.service" \
+        "${systemd_user_dir}/home-lab-production.service"
     systemctl --user daemon-reload
     systemctl --user enable --now home-lab-backup-verify.timer
 fi

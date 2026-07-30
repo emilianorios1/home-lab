@@ -47,6 +47,6 @@ if [[ -f "${repo_root}/.git" ]]; then
 fi
 
 compose run --rm migrate
-compose up -d --wait --wait-timeout 180 dashboard
+compose up -d --wait --wait-timeout 180 dashboard sync-runner
 
 echo "Development is ready at $(compose port dashboard 8501)"

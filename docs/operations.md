@@ -16,8 +16,9 @@ scripts/dev-up.sh
 ```
 
 `dev-up.sh` construye la imagen, espera PostgreSQL, aplica el esquema y `dbt build`,
-y finalmente espera el healthcheck de Streamlit. El código de `src/` se monta en
-el contenedor y Streamlit recarga los cambios.
+y finalmente espera los healthchecks de Streamlit y del runner de
+sincronizaciones. El código de `src/` se monta en ambos contenedores y Streamlit
+recarga los cambios.
 
 En un worktree enlazado, inicializá una sola vez su entorno aislado antes de usar
 los mismos comandos:
@@ -50,6 +51,7 @@ Comandos cotidianos:
 # Estado y logs
 docker compose ps
 docker compose logs -f dashboard
+docker compose logs -f sync-runner
 
 # Ejecutar tests en el virtualenv local
 python3 -m venv .venv
@@ -79,7 +81,7 @@ El instalador:
 1. genera `~/.config/home-lab/prod.env` con una contraseña aleatoria;
 2. construye una imagen local;
 3. crea la base productiva, aplica el esquema y ejecuta `dbt build`;
-4. arranca el dashboard y espera su healthcheck;
+4. arranca el dashboard y el runner interno, y espera sus healthchecks;
 5. instala un servicio systemd de usuario, un backup diario y una prueba
    mensual de restauración;
 6. intenta habilitar *lingering* para que siga activo sin una sesión abierta.
@@ -96,7 +98,9 @@ se incorporan a la imagen.
 
 La aplicación queda en `http://IP-DE-LA-NOTEBOOK:8501`. Streamlit no aporta
 autenticación en este despliegue: el puerto debe permitirse sólo en una red local
-confiable. PostgreSQL no publica ningún puerto productivo.
+confiable. Las sincronizaciones requieren además la clave
+`HOME_LAB_OPERATIONS_PASSWORD`, generada en `prod.env` si todavía no existe.
+PostgreSQL y el runner no publican puertos productivos.
 
 ## Operación productiva
 
@@ -105,9 +109,10 @@ confiable. PostgreSQL no publica ningún puerto productivo.
 systemctl --user status home-lab-production.service
 ~/.config/home-lab/production-compose.sh ps
 ~/.config/home-lab/production-compose.sh logs -f --tail=200 dashboard
+~/.config/home-lab/production-compose.sh logs -f --tail=200 sync-runner
 
-# Reiniciar sólo la aplicación
-~/.config/home-lab/production-compose.sh restart dashboard
+# Recrear la aplicación después de cambiar su clave de operaciones
+~/.config/home-lab/production-compose.sh up -d --force-recreate dashboard
 
 # Ejecutar ingestas con los mismos datos persistentes de producción
 ~/.config/home-lab/production-compose.sh run --rm tools sync-gmail
@@ -124,6 +129,8 @@ Los secretos de Gmail deben copiarse a
 `~/.config/home-lab/secrets/gmail_client_secret.json` y
 `gmail_token.json`. Las demás credenciales se editan únicamente en
 `~/.config/home-lab/prod.env`, cuyo modo debe permanecer en `0600`.
+La clave de **Operaciones** se consulta o reemplaza en ese mismo archivo; nunca
+debe incorporarse al repositorio.
 
 Cada deploy productivo:
 
@@ -131,7 +138,7 @@ Cada deploy productivo:
 2. baja la imagen indicada por digest;
 3. espera que PostgreSQL esté sano;
 4. ejecuta `home-lab init-db` y `dbt build`;
-5. reemplaza Streamlit y espera su healthcheck;
+5. reemplaza Streamlit y el runner, y espera sus healthchecks;
 6. vuelve a la imagen anterior si el arranque falla.
 
 Los logs Docker rotan a tres archivos de 10 MiB por servicio. Los backups se
