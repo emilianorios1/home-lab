@@ -24,6 +24,7 @@ El dashboard ofrece:
 - conciliación entre facturas y pagos de Mercado Pago;
 - resumen y movimientos financieros;
 - Facturas E del mes y acumulado móvil de 12 meses;
+- laboratorio de emisión Factura E en el sandbox de Afip SDK;
 - documentos y facturas;
 - vencimientos e importes;
 - descarga del PDF original;
@@ -48,6 +49,20 @@ MONOTRIBUTO_ANNUAL_LIMIT_ARS=valor-vigente
 La pantalla es un control operativo y no reemplaza la verificación del límite y
 la categoría en ARCA o con un contador. Las facturas emitidas no se muestran
 como cobradas hasta que exista una conciliación de ingresos en una fase futura.
+
+Al final de la misma pantalla hay un laboratorio WSFEX fijado al ambiente de
+desarrollo de Afip SDK. Requiere `AFIP_SDK_ACCESS_TOKEN`, confirmación explícita
+en cada alta y los códigos oficiales de país y unidad. Guarda la solicitud antes
+de enviarla y ofrece reintento cuando el resultado es indeterminado.
+
+Los CAE de ese laboratorio son de prueba: aparecen en su propia tabla, no se
+mezclan con los PDF emitidos realmente, no alteran los totales y no generan un
+PDF fiscal válido.
+
+Si la factura de salario repite cliente, servicio e importe, el botón
+**Guardar perfil recurrente** conserva esos datos localmente. Cada mes el
+formulario los precarga; sólo revisá fecha, fecha de pago y tipo de cambio antes
+de confirmar la emisión de prueba.
 
 ## Gastos compartidos
 

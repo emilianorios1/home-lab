@@ -222,8 +222,41 @@ de cambio, CAE y su vencimiento. El equivalente en pesos conserva la cotización
 incluida en cada comprobante.
 
 Las facturas emitidas se publican aparte de las obligaciones del hogar: emitir
-una Factura E no registra un cobro. El MVP tampoco emite comprobantes ni consulta
-servicios de ARCA.
+una Factura E no registra un cobro.
+
+La pantalla **Facturación E** también incluye un laboratorio de emisión mediante
+Afip SDK. En esta etapa está fijado al ambiente `dev`, al CUIT compartido de
+desarrollo y al servicio WSFEX: solicita un CAE de prueba, no un comprobante
+fiscal válido. Los intentos se guardan en
+`bronze.export_invoice_emissions`, separados de los PDF reales y de los totales
+mensuales o de monotributo.
+
+Creá un token nuevo en Afip SDK y guardalo sólo en el `.env` del entorno:
+
+```dotenv
+AFIP_SDK_ACCESS_TOKEN=token-nuevo-no-versionado
+```
+
+Si un token fue compartido por chat, correo o logs, revocalo antes de continuar.
+No se guarda el token ni el ticket de acceso de ARCA en PostgreSQL. La base
+conserva el borrador, el ID WSFEX, el número y el payload exacto antes de pedir
+el CAE. Si la respuesta queda indeterminada por un corte de red, el dashboard
+permite reenviar esa misma operación.
+
+Para una factura de salario que repite cliente, descripción e importe, el mismo
+formulario permite guardar un único perfil recurrente en Bronze. No automatiza
+la emisión en calendario: fecha, pago y tipo de cambio se revisan antes de cada
+solicitud.
+
+Antes de emitir hay que obtener de WSFEX los códigos vigentes de país, CUIT del
+país y unidad de medida. El formulario no los inventa ni los traduce. La
+[referencia WSFEX de Afip SDK](https://afipsdk.com/docs/api-reference/web-services/wsfex/)
+documenta los métodos de parámetros y autorización.
+
+Producción, certificado propio, delegación del servicio y PDF generado quedan
+fuera de este laboratorio. Habilitarlos requiere una revisión separada de
+credenciales, punto de venta, reglas fiscales e idempotencia contra el CUIT
+real.
 
 ### Naranja X
 

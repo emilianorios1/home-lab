@@ -37,6 +37,7 @@ La explicación completa está en
 - Lectura de Gmail y descarga segura de documentos financieros.
 - Facturas de EPE, ASSA y Litoral Gas, expensas Zeta y resúmenes de Naranja X.
 - Importación y seguimiento mensual/anual de Facturas E emitidas en ARCA.
+- Laboratorio de emisión Factura E con WSFEX a través del sandbox de Afip SDK.
 - Descarga de boletas de TGI desde SIAT Rosario.
 - Normalización y validación del modelo mediante dbt.
 - Conciliación de obligaciones con pagos.
@@ -124,8 +125,9 @@ la red local, usá `http://<ip-local-de-la-pc>:8501`.
 
 La aplicación permite revisar movimientos, obligaciones, conciliaciones,
 documentos, vencimientos, Facturas E y gastos compartidos, además de cargar el
-alquiler bruto mensual. El almacenamiento documental se monta como sólo lectura
-dentro del contenedor.
+alquiler bruto mensual. El laboratorio de Factura E está fijado a desarrollo y
+sus CAE de prueba no se mezclan con los totales reales. El almacenamiento
+documental se monta como sólo lectura dentro del contenedor.
 
 La lógica funcional y las pantallas están documentadas en
 [`docs/dashboard.md`](docs/dashboard.md).

@@ -2,11 +2,23 @@
 
 from __future__ import annotations
 
-from decimal import Decimal
+from datetime import date
+from decimal import Decimal, InvalidOperation
 
 import streamlit as st
 
-from home_lab.config import monotributo_annual_limit_ars
+from home_lab.arca.client import AfipSdkClient, AfipSdkError
+from home_lab.arca.emission import (
+    ExportInvoiceDraft,
+    RecurringExportInvoiceProfile,
+    create_emission,
+    emission_history,
+    emit_export_invoice,
+    recurring_invoice_profile,
+    retryable_emissions,
+    save_recurring_invoice_profile,
+)
+from home_lab.config import afip_sdk_access_token, monotributo_annual_limit_ars
 from home_lab.dashboard.queries import (
     export_invoice_monthly,
     export_invoice_summary,
@@ -112,5 +124,230 @@ else:
                 "Vencimiento CAE",
                 format="DD/MM/YYYY",
             ),
+        },
+    )
+
+st.divider()
+st.subheader("Laboratorio de emisión")
+st.caption(
+    "Emite Facturas E de prueba con el CUIT compartido de desarrollo de "
+    "Afip SDK. No genera un comprobante fiscal válido y no suma importes al "
+    "tracker ni al monotributo."
+)
+
+access_token = afip_sdk_access_token()
+profile = recurring_invoice_profile(engine)
+if access_token is None:
+    st.warning(
+        "Falta AFIP_SDK_ACCESS_TOKEN. Revocá el token que quedó expuesto, "
+        "creá uno nuevo y guardalo únicamente en el .env de este entorno."
+    )
+
+with st.expander("Nueva Factura E de prueba"):
+    if profile:
+        st.caption(
+            "Perfil recurrente cargado: verificá fecha, pago y tipo de cambio."
+        )
+    with st.form("sandbox-export-invoice"):
+        point_of_sale = st.number_input(
+            "Punto de venta WSFEX",
+            min_value=1,
+            step=1,
+            value=profile.point_of_sale if profile else 1,
+        )
+        issue_date = st.date_input("Fecha de emisión", value=date.today())
+        payment_date = st.date_input(
+            "Fecha de pago declarada",
+            value=date.today(),
+        )
+        client_name = st.text_input(
+            "Nombre o razón social del cliente",
+            value=profile.client_name if profile else "",
+        )
+        client_address = st.text_input(
+            "Domicilio del cliente",
+            value=profile.client_address if profile else "",
+        )
+        foreign_tax_id = st.text_input(
+            "Identificación tributaria extranjera",
+            value=profile.foreign_tax_id if profile else "",
+        )
+        destination_country_code = st.text_input(
+            "Código WSFEX del país de destino",
+            value=str(profile.destination_country_code) if profile else "",
+            help="Usá el código que devuelve FEXGetPARAM_DST_pais.",
+        )
+        destination_country_tax_id = st.text_input(
+            "CUIT ARCA del país de destino",
+            value=str(profile.destination_country_tax_id) if profile else "",
+            help="Usá el valor que devuelve FEXGetPARAM_DST_CUIT.",
+        )
+        description = st.text_area(
+            "Descripción del servicio",
+            value=profile.description if profile else "",
+        )
+        unit_code = st.number_input(
+            "Código WSFEX de unidad de medida",
+            min_value=1,
+            step=1,
+            value=profile.unit_code if profile else 7,
+            help="7 suele representar unidad; verificá el código en WSFEX.",
+        )
+        amount_usd = st.number_input(
+            "Importe total (USD)",
+            min_value=0.01,
+            step=10.0,
+            format="%.2f",
+            value=float(profile.amount_usd) if profile else 0.01,
+        )
+        exchange_rate = st.number_input(
+            "Tipo de cambio histórico (ARS por USD)",
+            min_value=0.000001,
+            step=1.0,
+            format="%.6f",
+        )
+        confirmed = st.checkbox(
+            "Confirmo que esto se enviará al sandbox compartido de Afip SDK."
+        )
+        save_profile = st.form_submit_button("Guardar perfil recurrente")
+        submitted = st.form_submit_button(
+            "Solicitar CAE de prueba",
+            disabled=access_token is None,
+        )
+
+    if save_profile:
+        try:
+            save_recurring_invoice_profile(
+                engine,
+                RecurringExportInvoiceProfile(
+                    point_of_sale=int(point_of_sale),
+                    client_name=client_name,
+                    client_address=client_address,
+                    foreign_tax_id=foreign_tax_id,
+                    destination_country_code=int(destination_country_code),
+                    destination_country_tax_id=int(destination_country_tax_id),
+                    description=description,
+                    unit_code=int(unit_code),
+                    amount_usd=Decimal(str(amount_usd)),
+                ),
+            )
+        except (ValueError, InvalidOperation) as error:
+            st.error(str(error))
+        else:
+            st.success("Perfil recurrente guardado.")
+            st.rerun()
+    elif submitted:
+        try:
+            country_code = int(destination_country_code)
+            country_tax_id = int(destination_country_tax_id)
+            draft = ExportInvoiceDraft(
+                point_of_sale=int(point_of_sale),
+                issue_date=issue_date,
+                payment_date=payment_date,
+                client_name=client_name,
+                client_address=client_address,
+                foreign_tax_id=foreign_tax_id,
+                destination_country_code=country_code,
+                destination_country_tax_id=country_tax_id,
+                description=description,
+                unit_code=int(unit_code),
+                amount_usd=Decimal(str(amount_usd)),
+                exchange_rate=Decimal(str(exchange_rate)),
+            )
+            if not confirmed:
+                raise ValueError("Confirmá el envío al sandbox.")
+            client = AfipSdkClient(access_token or "")
+            request_id = create_emission(engine, draft, client)
+            attempt = emit_export_invoice(engine, request_id, client)
+        except (ValueError, InvalidOperation) as error:
+            st.error(str(error))
+        except AfipSdkError as error:
+            st.warning(
+                f"{error} Si el borrador llegó a guardarse, reintentá desde "
+                "la lista inferior: se conservarán el ID y el payload."
+            )
+        else:
+            if attempt.status == "authorized":
+                st.success(
+                    f"CAE de prueba {attempt.cae} generado para "
+                    f"{attempt.point_of_sale:05d}-"
+                    f"{attempt.voucher_number:08d}."
+                )
+            elif attempt.status == "rejected":
+                st.error(
+                    attempt.error_message
+                    or "ARCA rechazó el comprobante de prueba."
+                )
+            else:
+                st.warning(
+                    attempt.error_message
+                    or "El resultado quedó indeterminado; reintentá la misma "
+                    "operación."
+                )
+
+retryable = retryable_emissions(engine)
+if retryable:
+    st.subheader("Operaciones pendientes o indeterminadas")
+    for attempt in retryable:
+        label = (
+            f"ID {attempt.request_id} · "
+            f"{attempt.point_of_sale:05d}-"
+            f"{(attempt.voucher_number or 0):08d} · {attempt.status}"
+        )
+        description_column, action_column = st.columns([4, 1])
+        description_column.write(label)
+        if action_column.button(
+            "Reintentar",
+            key=f"retry-export-invoice-{attempt.request_id}",
+            disabled=access_token is None,
+        ):
+            try:
+                result = emit_export_invoice(
+                    engine,
+                    attempt.request_id,
+                    AfipSdkClient(access_token or ""),
+                )
+            except AfipSdkError as error:
+                st.warning(str(error))
+            else:
+                if result.status == "authorized":
+                    st.success(f"CAE de prueba {result.cae} generado.")
+                else:
+                    st.warning(
+                        result.error_message
+                        or f"La operación quedó en estado {result.status}."
+                    )
+                st.rerun()
+
+history = emission_history(engine)
+if history:
+    st.subheader("Últimas pruebas")
+    st.dataframe(
+        history,
+        width="stretch",
+        hide_index=True,
+        column_config={
+            "request_id": "ID WSFEX",
+            "status": "Estado",
+            "point_of_sale": "Punto de venta",
+            "voucher_number": "Número",
+            "issue_date": st.column_config.DateColumn(
+                "Emisión",
+                format="DD/MM/YYYY",
+            ),
+            "foreign_total_amount": st.column_config.NumberColumn(
+                "Total USD",
+                format="USD %.2f",
+            ),
+            "exchange_rate": st.column_config.NumberColumn(
+                "Tipo de cambio",
+                format="$ %.6f",
+            ),
+            "cae": "CAE de prueba",
+            "cae_due_date": st.column_config.DateColumn(
+                "Vencimiento CAE",
+                format="DD/MM/YYYY",
+            ),
+            "error_message": "Detalle",
         },
     )
