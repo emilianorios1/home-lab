@@ -1,6 +1,6 @@
 # Arquitectura
 
-`home-lab` integra actividad financiera y documentos del hogar en PostgreSQL,
+`House Ledger` integra actividad financiera y documentos del hogar en PostgreSQL,
 los transforma con dbt y los presenta en Streamlit. Las páginas de reporte son de
 sólo lectura; la carga manual y las sincronizaciones viven en interfaces
 explícitas de mantenimiento.

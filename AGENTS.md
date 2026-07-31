@@ -2,7 +2,7 @@
 
 ## Purpose and sources of truth
 
-`home-lab` is a local platform for importing personal financial activity and
+`House Ledger` is a local platform for importing personal financial activity and
 household documents, normalizing them in PostgreSQL with dbt, and presenting
 read-only views in Streamlit. It uses Python 3.12, PostgreSQL 17, dbt, and a
 Bronze/Silver/Gold architecture.
