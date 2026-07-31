@@ -147,7 +147,7 @@ La lógica funcional y las pantallas están documentadas en
 | [Integraciones](docs/integrations.md) | Credenciales, fuentes, parsers, sincronización y cron |
 | [Modelo de datos](docs/data-model.md) | Tablas principales, obligaciones y conciliación |
 | [Dashboard](docs/dashboard.md) | Gastos compartidos y superficies de consulta |
-| [Operación](docs/operations.md) | Producción, logs, backups, restauración y CI/CD |
+| [Operación](docs/operations.md) | Producción, cambio de clave, logs, backups, restauración y CI/CD |
 
 ## Validación
 

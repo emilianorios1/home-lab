@@ -114,6 +114,9 @@ systemctl --user status home-lab-production.service
 # Recrear la aplicación después de cambiar su clave de operaciones
 ~/.config/home-lab/production-compose.sh up -d --force-recreate dashboard
 
+# Pedir una nueva clave sin mostrarla y recrear el dashboard
+scripts/change-operations-password.sh
+
 # Ejecutar ingestas con los mismos datos persistentes de producción
 ~/.config/home-lab/production-compose.sh run --rm tools sync-gmail
 ~/.config/home-lab/production-compose.sh run --rm tools sync-mercadopago
