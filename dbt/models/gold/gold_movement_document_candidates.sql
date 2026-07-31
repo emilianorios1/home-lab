@@ -10,6 +10,7 @@ with invoice_dues as (
             when 'water_bill' then 'Agua'
             when 'gas_bill' then 'Gas'
             when 'property_tax_bill' then 'TGI'
+            when 'internet_bill' then 'Internet'
             when 'credit_card_statement' then 'Tarjeta Naranja'
         end as bill_category
     from {{ ref('silver_invoice_due_dates') }} d

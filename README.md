@@ -42,7 +42,8 @@ La explicación completa está en
 - Importación de movimientos mediante la API de reportes de Mercado Pago.
 - Importación y validación de resúmenes de cuenta de Mercado Pago.
 - Lectura de Gmail y descarga segura de documentos financieros.
-- Facturas de EPE, ASSA y Litoral Gas, expensas Zeta y resúmenes de Naranja X.
+- Facturas de EPE, ASSA y Litoral Gas, avisos de IPLAN, expensas Zeta y
+  resúmenes de Naranja X.
 - Importación y seguimiento mensual/anual de Facturas E emitidas en ARCA.
 - Laboratorio de emisión Factura E con WSFEX a través del sandbox de Afip SDK.
 - Descarga de boletas de TGI desde SIAT Rosario.

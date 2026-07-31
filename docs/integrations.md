@@ -132,11 +132,11 @@ El token se guarda en `secrets/gmail_token.json` con permisos restringidos. No s
 almacena la contraseña de Gmail.
 
 El filtro predeterminado se configura en `.env`. Incluye adjuntos PDF de Zeta,
-facturas enlazadas de EPE, Aguas Santafesinas y Litoral Gas, y resúmenes de
-Naranja X:
+facturas enlazadas de EPE, Aguas Santafesinas y Litoral Gas, resúmenes de
+Naranja X y avisos mensuales de IPLAN:
 
 ```dotenv
-GMAIL_QUERY={from:no_reply@zetace.com.ar from:oficinavirtual@epe.santafe.gov.ar from:facturadigital@aguassantafesinas.com from:factura@digital.litoralgas.com.ar from:avisos@info.naranjax.com} newer_than:45d
+GMAIL_QUERY={from:no_reply@zetace.com.ar from:oficinavirtual@epe.santafe.gov.ar from:facturadigital@aguassantafesinas.com from:factura@digital.litoralgas.com.ar from:avisos@info.naranjax.com from:noreply@iplan.com.ar} newer_than:45d
 ```
 
 Para ejecutar el flujo completo:
@@ -196,6 +196,15 @@ El parser de ASSA publica las dos cuotas de la factura de agua e ignora los
 reclamos de facturas vencidas; el de Litoral Gas publica su vencimiento único.
 Ambos extraen cliente, período, emisión, domicilio, consumo cuando está
 disponible e importe.
+
+### IPLAN Hogar
+
+IPLAN protege la descarga del PDF con reCAPTCHA, por lo que el flujo no intenta
+automatizarla ni conservar un documento inexistente. En su lugar, reconoce el
+correo mensual `Tu factura de Iplan* Hogar`, extrae período, importe y primer
+vencimiento del mensaje guardado en Bronze, y publica una obligación de
+`Internet` con trazabilidad al `message_id`. Los recordatorios de deuda y las
+promociones no generan facturas.
 
 Para probar o recuperar un PDF local:
 

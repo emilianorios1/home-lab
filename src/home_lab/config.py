@@ -49,7 +49,8 @@ def gmail_query() -> str:
         "from:oficinavirtual@epe.santafe.gov.ar "
         "from:facturadigital@aguassantafesinas.com "
         "from:factura@digital.litoralgas.com.ar "
-        "from:avisos@info.naranjax.com} newer_than:45d",
+        "from:avisos@info.naranjax.com "
+        "from:noreply@iplan.com.ar} newer_than:45d",
     )
 
 

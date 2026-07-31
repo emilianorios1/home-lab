@@ -24,7 +24,8 @@ with invoice_dues as (
         'electricity_bill',
         'water_bill',
         'gas_bill',
-        'property_tax_bill'
+        'property_tax_bill',
+        'internet_bill'
     )
 ),
 
@@ -62,6 +63,7 @@ automatic_items as (
             when 'water_bill' then 'Agua'
             when 'gas_bill' then 'Gas'
             when 'property_tax_bill' then 'TGI'
+            when 'internet_bill' then 'Internet'
         end as category,
         invoice_id,
         document_id,

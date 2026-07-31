@@ -83,10 +83,11 @@ de confirmar la emisión de prueba.
 ## Gastos compartidos
 
 El resumen mensual reúne las obligaciones del hogar y los movimientos usados
-para pagarlas. Las facturas de Expensas, Luz, Agua, Gas y TGI entran en el mes de
-su vencimiento. El alquiler bruto se carga para cada mes en el dashboard y el
-movimiento categorizado como `Alquiler` en Mercado Pago se usa para comprobar el
-pago.
+para pagarlas. Las facturas de Expensas, Luz, Agua, Gas, TGI e Internet entran
+en el mes de su vencimiento. Internet se obtiene del aviso mensual de IPLAN,
+porque su PDF requiere una descarga manual con reCAPTCHA. El alquiler bruto se
+carga para cada mes en el dashboard y el movimiento categorizado como
+`Alquiler` en Mercado Pago se usa para comprobar el pago.
 
 La carga mensual se guarda en `bronze.manual_monthly_rents`. Corregir un importe
 actualiza el mismo mes. Mientras no exista una carga explícita, el resumen
@@ -125,7 +126,7 @@ En la pantalla **Gastos compartidos** se puede:
 - cargar o corregir el alquiler bruto informado por la inmobiliaria;
 - revisar el cálculo separado del alquiler;
 - identificar rápidamente servicios pendientes y sus vencimientos;
-- descargar el PDF de las expensas y de cada servicio desde su tarjeta;
+- descargar el PDF de los servicios que entregan un documento automatizable;
 - copiar un resumen para compartir;
 - desplegar el detalle de facturas y conciliaciones.
 
