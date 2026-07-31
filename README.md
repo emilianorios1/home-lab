@@ -1,8 +1,11 @@
-# home-lab
+# House Ledger
 
 Plataforma local para importar actividad financiera y documentos del hogar,
 normalizarlos en PostgreSQL con dbt y consultarlos desde un dashboard Streamlit.
 Usa Python 3.12, PostgreSQL 17 y una arquitectura Bronze/Silver/Gold.
+
+El paquete Python, el comando `home-lab` y las rutas operativas conservan su
+nombre original por compatibilidad.
 
 ## Arquitectura
 

@@ -10,7 +10,7 @@ from home_lab.dashboard.queries import available_date_range
 from home_lab.database import get_engine
 
 
-st.set_page_config(page_title="home-lab", page_icon="💸", layout="wide")
+st.set_page_config(page_title="House Ledger", page_icon="💸", layout="wide")
 engine = get_engine()
 date_range = available_date_range(engine)
 

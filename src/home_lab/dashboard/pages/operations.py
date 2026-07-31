@@ -1,4 +1,4 @@
-"""Explicit maintenance actions for the local home-lab instance."""
+"""Explicit maintenance actions for the local House Ledger instance."""
 
 from __future__ import annotations
 

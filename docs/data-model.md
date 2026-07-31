@@ -1,6 +1,6 @@
 # Modelo de datos
 
-`home-lab` usa una arquitectura Bronze/Silver/Gold. Bronze conserva las fuentes
+`House Ledger` usa una arquitectura Bronze/Silver/Gold. Bronze conserva las fuentes
 reproducibles, Silver normaliza sus entidades y Gold presenta modelos listos para
 consulta.
 

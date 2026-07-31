@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "home-lab"
 version = "0.1.0"
-description = "Local cost-management automation"
+description = "Household finance and document automation"
 requires-python = ">=3.12"
 dependencies = [
   "dbt-postgres>=1.9,<2",
