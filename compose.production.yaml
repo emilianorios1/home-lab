@@ -62,6 +62,7 @@ services:
     image: ${HOME_LAB_IMAGE:?HOME_LAB_IMAGE must identify the deployed image}
     environment:
       <<: *app-environment
+      AFIP_SDK_ACCESS_TOKEN: ${AFIP_SDK_ACCESS_TOKEN:-}
       HOME_LAB_OPERATIONS_PASSWORD: ${HOME_LAB_OPERATIONS_PASSWORD:-}
       HOME_LAB_SYNC_RUNNER_URL: http://sync-runner:8080
       STREAMLIT_SERVER_ENABLE_XSRF_PROTECTION: "true"

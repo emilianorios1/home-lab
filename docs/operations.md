@@ -117,6 +117,9 @@ systemctl --user status home-lab-production.service
 # Pedir una nueva clave sin mostrarla y recrear el dashboard
 scripts/change-operations-password.sh
 
+# Guardar un nuevo token de Afip SDK sin mostrarlo y recrear el dashboard
+scripts/set-afip-sdk-access-token.sh
+
 # Ejecutar ingestas con los mismos datos persistentes de producción
 ~/.config/home-lab/production-compose.sh run --rm tools sync-gmail
 ~/.config/home-lab/production-compose.sh run --rm tools sync-mercadopago
@@ -133,7 +136,9 @@ Los secretos de Gmail deben copiarse a
 `gmail_token.json`. Las demás credenciales se editan únicamente en
 `~/.config/home-lab/prod.env`, cuyo modo debe permanecer en `0600`.
 La clave de **Operaciones** se consulta o reemplaza en ese mismo archivo; nunca
-debe incorporarse al repositorio.
+debe incorporarse al repositorio. El token de Afip SDK se rota primero desde el
+proveedor y luego se carga con `scripts/set-afip-sdk-access-token.sh`; no debe
+pasarse como argumento ni quedar en el historial de la terminal.
 
 Cada deploy productivo:
 
