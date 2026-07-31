@@ -37,7 +37,7 @@ models:
           - not_null
           - accepted_values:
               arguments:
-                values: [Expensas, Luz, Agua, Gas, TGI]
+                values: [Expensas, Luz, Agua, Gas, TGI, Internet]
       - name: payment_status
         data_tests:
           - accepted_values:

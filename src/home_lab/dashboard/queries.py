@@ -581,6 +581,7 @@ def monthly_shared_expenses(engine: Engine, month: date) -> dict[str, object]:
         ("Agua", "Agua"),
         ("Gas", "Gas"),
         ("TGI", "TGI"),
+        ("Internet", "Internet"),
     ):
         expected, paid, status, due_date, payment_date, issuer, documents = (
             bill_values(category)

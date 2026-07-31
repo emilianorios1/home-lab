@@ -320,8 +320,16 @@ def test_monthly_shared_expenses_have_monthly_summary_shape() -> None:
         "Agua",
         "Gas",
         "TGI",
+        "Internet",
     ]
-    assert list(services["category"]) == ["Expensas", "Luz", "Agua", "Gas", "TGI"]
+    assert list(services["category"]) == [
+        "Expensas",
+        "Luz",
+        "Agua",
+        "Gas",
+        "TGI",
+        "Internet",
+    ]
     assert "documents" in services
     assert summary["rent"]["gross"] == (
         summary["rent"]["net"] + summary["rent"]["extraordinary"]
@@ -414,6 +422,70 @@ def test_monthly_shared_expenses_include_source_documents() -> None:
                     """
                 ),
                 {"document_id": document_id, "message_id": message_id},
+            )
+
+
+def test_iplan_email_creates_internet_bill_without_fake_document() -> None:
+    engine = get_engine()
+    message_id = f"iplan-email-{uuid4()}"
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                INSERT INTO bronze.gmail_messages (
+                    message_id, sender, subject, received_at, snippet,
+                    metadata_path
+                )
+                VALUES (
+                    :message_id,
+                    'Iplan Hogar <noreply@iplan.com.ar>',
+                    'Tu factura de Iplan* Hogar 12/2098 está disponible',
+                    timestamp with time zone '2098-12-06 12:00:00+00',
+                    'El valor de tus servicios este mes es $12345.67 y su '
+                    '1er vencimiento es el 16/12/2098.',
+                    'synthetic/iplan-message.json'
+                )
+                """
+            ),
+            {"message_id": message_id},
+        )
+
+    try:
+        summary = monthly_shared_expenses(engine, date(2098, 12, 1))
+        internet = summary["services"].loc[
+            summary["services"]["category"] == "Internet"
+        ].iloc[0]
+
+        assert internet["issuer"] == "IPLAN Hogar"
+        assert internet["due_date"] == date(2098, 12, 16)
+        assert internet["amount"] == Decimal("12345.67")
+        assert internet["documents"] == []
+        assert internet["status"] == "Pendiente"
+
+        with engine.connect() as connection:
+            invoice = connection.execute(
+                text(
+                    """
+                    SELECT document_id, source_message_id, document_type
+                    FROM silver.invoices
+                    WHERE source_message_id = :message_id
+                    """
+                ),
+                {"message_id": message_id},
+            ).one()
+        assert invoice.document_id is None
+        assert invoice.source_message_id == message_id
+        assert invoice.document_type == "internet_bill"
+    finally:
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    """
+                    DELETE FROM bronze.gmail_messages
+                    WHERE message_id = :message_id
+                    """
+                ),
+                {"message_id": message_id},
             )
 
 

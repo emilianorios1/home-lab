@@ -76,6 +76,7 @@ SERVICE_ICONS = {
     "Agua": "💧",
     "Gas": "🔥",
     "TGI": "🏛️",
+    "Internet": "🌐",
 }
 
 STATUS_ICONS = {
@@ -91,6 +92,7 @@ SERVICE_ORDER = {
     "Agua": 2,
     "Gas": 3,
     "TGI": 4,
+    "Internet": 5,
 }
 
 

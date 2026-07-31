@@ -3,6 +3,7 @@
 select
     invoice_id as bill_id,
     document_id,
+    source_message_id,
     document_type,
     issuer,
     unit,

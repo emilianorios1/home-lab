@@ -212,6 +212,7 @@ categorized_movements as (
             when transaction_type ilike '%Municipalidad de rosar%' then 'TGI'
             when transaction_type ilike '%Empresa Provincial de la Energía%'
               or transaction_type ilike '%EPE%' then 'Luz'
+            when transaction_type ilike '%Iplan%' then 'Internet'
             when transaction_type ilike '%Naranja X%'
               or transaction_type ilike '%Tarjeta Naranja%' then 'Tarjeta Naranja'
             else 'Sin categorizar'
@@ -225,7 +226,8 @@ known_amount_categories as (
         min(explicit_category) as known_category
     from categorized_movements
     where explicit_category in (
-        'Alquiler', 'Expensas', 'Luz', 'Agua', 'Gas', 'TGI', 'Tarjeta Naranja'
+        'Alquiler', 'Expensas', 'Luz', 'Agua', 'Gas', 'TGI', 'Internet',
+        'Tarjeta Naranja'
     )
     group by abs(transaction_net_amount)
     having count(distinct explicit_category) = 1
