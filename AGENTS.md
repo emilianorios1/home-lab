@@ -55,7 +55,7 @@ Bronze/Silver/Gold architecture.
 - `dbt/models/gold/`: reporting and reconciliation models.
 - `dbt/tests/` and model `schema.yml` files: dbt data-quality assertions.
 - `tests/`: pytest unit and integration-style tests using local fakes/fixtures.
-- `scripts/`: cron-friendly synchronization wrappers guarded by `flock`.
+- `scripts/`: local development, deployment, backup, and maintenance commands.
 
 ## Change guidelines
 
@@ -158,10 +158,10 @@ profiles. It requires the configured local PostgreSQL instance.
      settings.
   5. Perform every file modification and all task-specific validation from that
      worktree. Do not modify the primary checkout.
-- The first `scripts/dev-up.sh` in a linked worktree restores a current
-  production snapshot into its isolated PostgreSQL volume before migrations.
-  Treat that database as sensitive production-derived data: never print,
-  export, commit, or copy its contents into fixtures or logs.
+- `scripts/dev-up.sh` starts isolated PostgreSQL and dbt by default; add `--full`
+  only for dashboard work. Use `--snapshot` only when representative production
+  data is required. Treat that database as sensitive production-derived data:
+  never print, export, commit, or copy its contents into fixtures or logs.
 - Choose a unique slug if the intended branch or directory already exists.
 - Do not copy, stash, reset, clean, or otherwise alter uncommitted changes from
   the primary checkout unless the user explicitly asks.

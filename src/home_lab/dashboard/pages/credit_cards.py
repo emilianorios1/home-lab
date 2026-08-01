@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-import plotly.express as px
 import streamlit as st
 
 from home_lab.dashboard.queries import (
@@ -63,14 +62,13 @@ if expenses.empty:
 else:
     if not categories.empty:
         st.subheader("Gastos en pesos por categoría")
-        st.plotly_chart(
-            px.bar(
-                categories.sort_values("amount"),
-                x="amount",
-                y="category",
-                orientation="h",
-            ),
-            width="stretch",
+        st.bar_chart(
+            categories.sort_values("amount"),
+            x="amount",
+            y="category",
+            x_label="Importe",
+            y_label="Categoría",
+            horizontal=True,
         )
 
     st.subheader("Detalle de consumos")

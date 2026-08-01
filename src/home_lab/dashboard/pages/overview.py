@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import plotly.express as px
 import streamlit as st
 
 from home_lab.dashboard.queries import (
@@ -39,19 +38,30 @@ expense_data = expenses_by_category(engine, start_date, end_date)
 left, right = st.columns(2)
 with left:
     st.subheader("Saldo diario")
-    st.plotly_chart(
-        px.line(balance_data, x="release_date", y="partial_balance", markers=True),
-        width="stretch",
+    st.line_chart(
+        balance_data,
+        x="release_date",
+        y="partial_balance",
+        x_label="Fecha",
+        y_label="Saldo",
     )
 with right:
     st.subheader("Ingresos y egresos diarios")
-    st.plotly_chart(
-        px.bar(flow_data, x="release_date", y=["income", "expenses"], barmode="relative"),
-        width="stretch",
+    st.bar_chart(
+        flow_data,
+        x="release_date",
+        y=["income", "expenses"],
+        x_label="Fecha",
+        y_label="Importe",
+        stack=True,
     )
 
 st.subheader("Egresos por categoría")
-st.plotly_chart(
-    px.bar(expense_data.sort_values("amount"), x="amount", y="category", orientation="h"),
-    width="stretch",
+st.bar_chart(
+    expense_data.sort_values("amount"),
+    x="amount",
+    y="category",
+    x_label="Importe",
+    y_label="Categoría",
+    horizontal=True,
 )

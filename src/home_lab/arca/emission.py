@@ -1,8 +1,7 @@
-"""Persistent, retry-safe Factura E sandbox emission."""
+"""One-shot Factura E sandbox emission and recurring profile storage."""
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from decimal import Decimal
@@ -10,12 +9,7 @@ from typing import Any
 
 from sqlalchemy import Engine, text
 
-from home_lab.arca.client import (
-    DEVELOPMENT_TAX_ID,
-    EXPORT_INVOICE_TYPE,
-    AfipSdkClient,
-    AfipSdkError,
-)
+from home_lab.arca.client import EXPORT_INVOICE_TYPE, AfipSdkClient, AfipSdkError
 
 
 @dataclass(frozen=True)
@@ -34,7 +28,6 @@ class ExportInvoiceDraft:
     exchange_rate: Decimal
 
     def validate(self, *, today: date | None = None) -> None:
-        today = today or date.today()
         required_text = {
             "nombre del cliente": self.client_name,
             "domicilio del cliente": self.client_address,
@@ -44,26 +37,22 @@ class ExportInvoiceDraft:
         for label, value in required_text.items():
             if not value.strip():
                 raise ValueError(f"Falta {label}.")
-        if self.point_of_sale <= 0:
-            raise ValueError("El punto de venta debe ser positivo.")
-        if self.destination_country_code <= 0:
-            raise ValueError("El código de país debe ser positivo.")
-        if self.destination_country_tax_id <= 0:
-            raise ValueError("La CUIT del país debe ser positiva.")
-        if self.unit_code <= 0:
-            raise ValueError("El código de unidad debe ser positivo.")
-        if self.amount_usd <= 0:
-            raise ValueError("El importe debe ser positivo.")
-        if self.exchange_rate <= 0:
-            raise ValueError("El tipo de cambio debe ser positivo.")
-        if abs((self.issue_date - today).days) > 5:
+        for label, value in {
+            "punto de venta": self.point_of_sale,
+            "código de país": self.destination_country_code,
+            "CUIT del país": self.destination_country_tax_id,
+            "código de unidad": self.unit_code,
+            "importe": self.amount_usd,
+            "tipo de cambio": self.exchange_rate,
+        }.items():
+            if value <= 0:
+                raise ValueError(f"El {label} debe ser positivo.")
+        if abs((self.issue_date - (today or date.today())).days) > 5:
             raise ValueError(
                 "La fecha de emisión debe estar dentro de los cinco días de hoy."
             )
         if self.payment_date < self.issue_date:
-            raise ValueError(
-                "La fecha de pago no puede ser anterior a la emisión."
-            )
+            raise ValueError("La fecha de pago no puede ser anterior a la emisión.")
 
 
 @dataclass(frozen=True)
@@ -93,23 +82,6 @@ class RecurringExportInvoiceProfile:
             amount_usd=self.amount_usd,
             exchange_rate=Decimal("1"),
         ).validate()
-
-
-@dataclass(frozen=True)
-class EmissionAttempt:
-    request_id: int
-    status: str
-    point_of_sale: int
-    voucher_number: int | None
-    cae: str | None
-    cae_due_date: date | None
-    error_message: str | None
-
-
-def _request_id(last_id: int, now: datetime | None = None) -> int:
-    moment = now or datetime.now(timezone.utc)
-    timestamp_id = int(moment.strftime("%y%m%d%H%M%S%f")[:15])
-    return max(last_id + 1, timestamp_id)
 
 
 def recurring_invoice_profile(
@@ -179,92 +151,33 @@ def save_recurring_invoice_profile(
         )
 
 
-def create_emission(
-    engine: Engine,
+def _request_id(last_id: int, now: datetime | None = None) -> int:
+    moment = now or datetime.now(timezone.utc)
+    timestamp_id = int(moment.strftime("%y%m%d%H%M%S%f")[:15])
+    return max(last_id + 1, timestamp_id)
+
+
+def _voucher_payload(
     draft: ExportInvoiceDraft,
-    client: AfipSdkClient,
-    *,
-    today: date | None = None,
-    now: datetime | None = None,
-) -> int:
-    """Persist a draft and return its WSFEX request ID."""
-    draft.validate(today=today)
-    request_id = _request_id(client.get_last_request_id(), now)
-    with engine.begin() as connection:
-        connection.execute(
-            text(
-                """
-                INSERT INTO bronze.export_invoice_emissions (
-                    request_id, environment, tax_id, status, point_of_sale,
-                    voucher_type, issue_date, payment_date, client_name,
-                    client_address, foreign_tax_id, destination_country_code,
-                    destination_country_tax_id, description, unit_code,
-                    foreign_currency, foreign_total_amount, exchange_rate
-                )
-                VALUES (
-                    :request_id, 'dev', :tax_id, 'pending', :point_of_sale,
-                    :voucher_type, :issue_date, :payment_date, :client_name,
-                    :client_address, :foreign_tax_id, :destination_country_code,
-                    :destination_country_tax_id, :description, :unit_code,
-                    'USD', :foreign_total_amount, :exchange_rate
-                )
-                """
-            ),
-            {
-                "request_id": request_id,
-                "tax_id": DEVELOPMENT_TAX_ID,
-                "point_of_sale": draft.point_of_sale,
-                "voucher_type": EXPORT_INVOICE_TYPE,
-                "issue_date": draft.issue_date,
-                "payment_date": draft.payment_date,
-                "client_name": draft.client_name.strip(),
-                "client_address": draft.client_address.strip(),
-                "foreign_tax_id": draft.foreign_tax_id.strip(),
-                "destination_country_code": draft.destination_country_code,
-                "destination_country_tax_id": draft.destination_country_tax_id,
-                "description": draft.description.strip(),
-                "unit_code": draft.unit_code,
-                "foreign_total_amount": draft.amount_usd,
-                "exchange_rate": draft.exchange_rate,
-            },
-        )
-    return request_id
-
-
-def _load_emission(engine: Engine, request_id: int) -> dict[str, Any]:
-    with engine.connect() as connection:
-        row = connection.execute(
-            text(
-                """
-                SELECT *
-                FROM bronze.export_invoice_emissions
-                WHERE request_id = :request_id
-                """
-            ),
-            {"request_id": request_id},
-        ).mappings().one_or_none()
-    if row is None:
-        raise ValueError(f"No existe la emisión {request_id}.")
-    return dict(row)
-
-
-def _voucher_payload(row: dict[str, Any]) -> dict[str, Any]:
-    amount = float(row["foreign_total_amount"])
+    request_id: int,
+    voucher_number: int,
+) -> dict[str, Any]:
+    amount = float(draft.amount_usd)
     return {
-        "Id": row["request_id"],
-        "Fecha_cbte": row["issue_date"].strftime("%Y%m%d"),
-        "Cbte_Tipo": row["voucher_type"],
-        "Punto_vta": row["point_of_sale"],
-        "Cbte_nro": row["voucher_number"],
+        "Id": request_id,
+        "Fecha_cbte": draft.issue_date.strftime("%Y%m%d"),
+        "Cbte_Tipo": EXPORT_INVOICE_TYPE,
+        "Punto_vta": draft.point_of_sale,
+        "Cbte_nro": voucher_number,
         "Tipo_expo": 2,
         "Permiso_existente": "",
-        "Dst_cmp": row["destination_country_code"],
-        "Cliente": row["client_name"],
-        "Cuit_pais_cliente": row["destination_country_tax_id"],
-        "Domicilio_cliente": row["client_address"],
-        "Id_impositivo": row["foreign_tax_id"],
+        "Dst_cmp": draft.destination_country_code,
+        "Cliente": draft.client_name.strip(),
+        "Cuit_pais_cliente": draft.destination_country_tax_id,
+        "Domicilio_cliente": draft.client_address.strip(),
+        "Id_impositivo": draft.foreign_tax_id.strip(),
         "Moneda_Id": "DOL",
-        "Moneda_ctz": float(row["exchange_rate"]),
+        "Moneda_ctz": float(draft.exchange_rate),
         "Imp_total": amount,
         "Forma_pago": "Transferencia bancaria",
         "Idioma_cbte": 1,
@@ -272,247 +185,53 @@ def _voucher_payload(row: dict[str, Any]) -> dict[str, Any]:
             "Item": [
                 {
                     "Pro_codigo": "SERVICIO",
-                    "Pro_ds": row["description"],
+                    "Pro_ds": draft.description.strip(),
                     "Pro_qty": 1,
-                    "Pro_umed": row["unit_code"],
+                    "Pro_umed": draft.unit_code,
                     "Pro_precio_uni": amount,
                     "Pro_bonificacion": 0,
                     "Pro_total_item": amount,
                 }
             ]
         },
-        "Fecha_pago": row["payment_date"].strftime("%Y%m%d"),
+        "Fecha_pago": draft.payment_date.strftime("%Y%m%d"),
     }
 
 
-def _parse_date(value: object) -> date | None:
-    if value in (None, ""):
+def _cae_due_date(value: object) -> date | None:
+    if not value:
         return None
-    raw = str(value)
     for pattern in ("%Y%m%d", "%Y-%m-%d"):
         try:
-            return datetime.strptime(raw, pattern).date()
+            return datetime.strptime(str(value), pattern).date()
         except ValueError:
-            continue
+            pass
     return None
 
 
-def _response_detail(value: object) -> str | None:
-    if value in (None, "", [], {}):
-        return None
-    if isinstance(value, str):
-        return value
-    return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
-
-
-def _interpret_response(
-    response: dict[str, Any],
-) -> tuple[str, str | None, date | None, str | None, str | None]:
+def emit_export_invoice(
+    draft: ExportInvoiceDraft,
+    client: AfipSdkClient,
+    *,
+    today: date | None = None,
+    now: datetime | None = None,
+) -> tuple[str, date | None, int]:
+    """Send one confirmed sandbox request without retaining fiscal state."""
+    # ponytail: sandbox calls are one-shot; persist retries only for real emission.
+    draft.validate(today=today)
+    request_id = _request_id(client.get_last_request_id(), now)
+    voucher_number = client.get_last_voucher(draft.point_of_sale) + 1
+    response = client.authorize(_voucher_payload(draft, request_id, voucher_number))
     result = response.get("FEXAuthorizeResult")
     if not isinstance(result, dict):
-        return (
-            "unknown",
-            None,
-            None,
-            None,
-            "WSFEX devolvió una respuesta que no se pudo interpretar.",
-        )
-
-    service_error = result.get("FEXErr")
-    if isinstance(service_error, dict):
-        try:
-            error_code = int(service_error.get("ErrCode") or 0)
-        except (TypeError, ValueError):
-            error_code = -1
-        if error_code:
-            return (
-                "rejected",
-                None,
-                None,
-                str(error_code),
-                str(service_error.get("ErrMsg") or "WSFEX rechazó la solicitud."),
-            )
-
+        raise AfipSdkError("WSFEX devolvió una respuesta que no se pudo interpretar.")
+    if error := AfipSdkClient._service_error(result):
+        raise error
     authorization = result.get("FEXResultAuth")
     if not isinstance(authorization, dict):
-        return (
-            "unknown",
-            None,
-            None,
-            None,
-            "WSFEX no informó el resultado de autorización.",
-        )
-    outcome = str(authorization.get("Resultado") or "").upper()
-    cae = str(authorization.get("Cae") or "").strip() or None
-    cae_due_date = _parse_date(authorization.get("Fch_venc_Cae"))
-    observations = _response_detail(authorization.get("Motivos_Obs"))
-    if outcome == "A" and cae:
-        return ("authorized", cae, cae_due_date, None, observations)
-    if outcome == "R":
-        return ("rejected", None, None, None, observations or "ARCA rechazó la solicitud.")
-    return (
-        "unknown",
-        cae,
-        cae_due_date,
-        None,
-        observations or "WSFEX no informó un resultado concluyente.",
-    )
-
-
-def emit_export_invoice(
-    engine: Engine,
-    request_id: int,
-    client: AfipSdkClient,
-) -> EmissionAttempt:
-    """Authorize a persisted draft, safely reusing its exact request on retry."""
-    row = _load_emission(engine, request_id)
-    if row["status"] == "authorized":
-        return emission_attempt(engine, request_id)
-    if row["status"] == "rejected":
-        raise ValueError("Una emisión rechazada no se reintenta sin corregirla.")
-
-    if row["voucher_number"] is None:
-        voucher_number = client.get_last_voucher(row["point_of_sale"]) + 1
-        with engine.begin() as connection:
-            connection.execute(
-                text(
-                    """
-                    UPDATE bronze.export_invoice_emissions
-                    SET voucher_number = :voucher_number, updated_at = now()
-                    WHERE request_id = :request_id
-                      AND voucher_number IS NULL
-                    """
-                ),
-                {
-                    "request_id": request_id,
-                    "voucher_number": voucher_number,
-                },
-            )
-        row = _load_emission(engine, request_id)
-
-    if row["request_payload"] is None:
-        payload = _voucher_payload(row)
-        with engine.begin() as connection:
-            connection.execute(
-                text(
-                    """
-                    UPDATE bronze.export_invoice_emissions
-                    SET request_payload = cast(:payload AS jsonb),
-                        updated_at = now()
-                    WHERE request_id = :request_id
-                      AND request_payload IS NULL
-                    """
-                ),
-                {
-                    "request_id": request_id,
-                    "payload": json.dumps(payload),
-                },
-            )
-        row = _load_emission(engine, request_id)
-
-    try:
-        response = client.authorize(row["request_payload"])
-    except AfipSdkError as error:
-        with engine.begin() as connection:
-            connection.execute(
-                text(
-                    """
-                    UPDATE bronze.export_invoice_emissions
-                    SET status = 'unknown', error_message = :error_message,
-                        updated_at = now()
-                    WHERE request_id = :request_id
-                    """
-                ),
-                {
-                    "request_id": request_id,
-                    "error_message": str(error),
-                },
-            )
-        raise
-
-    status, cae, cae_due_date, error_code, error_message = _interpret_response(
-        response
-    )
-    with engine.begin() as connection:
-        connection.execute(
-            text(
-                """
-                UPDATE bronze.export_invoice_emissions
-                SET status = :status,
-                    response_payload = cast(:response_payload AS jsonb),
-                    cae = :cae,
-                    cae_due_date = :cae_due_date,
-                    error_code = :error_code,
-                    error_message = :error_message,
-                    updated_at = now()
-                WHERE request_id = :request_id
-                """
-            ),
-            {
-                "request_id": request_id,
-                "status": status,
-                "response_payload": json.dumps(response),
-                "cae": cae,
-                "cae_due_date": cae_due_date,
-                "error_code": error_code,
-                "error_message": error_message,
-            },
-        )
-    return emission_attempt(engine, request_id)
-
-
-def emission_attempt(engine: Engine, request_id: int) -> EmissionAttempt:
-    row = _load_emission(engine, request_id)
-    return EmissionAttempt(
-        request_id=row["request_id"],
-        status=row["status"],
-        point_of_sale=row["point_of_sale"],
-        voucher_number=row["voucher_number"],
-        cae=row["cae"],
-        cae_due_date=row["cae_due_date"],
-        error_message=row["error_message"],
-    )
-
-
-def retryable_emissions(engine: Engine) -> list[EmissionAttempt]:
-    with engine.connect() as connection:
-        rows = connection.execute(
-            text(
-                """
-                SELECT request_id
-                FROM bronze.export_invoice_emissions
-                WHERE environment = 'dev'
-                  AND status IN ('pending', 'unknown')
-                ORDER BY created_at DESC
-                LIMIT 10
-                """
-            )
-        ).scalars()
-        request_ids = list(rows)
-    return [emission_attempt(engine, request_id) for request_id in request_ids]
-
-
-def emission_history(engine: Engine) -> list[dict[str, Any]]:
-    with engine.connect() as connection:
-        rows = connection.execute(
-            text(
-                """
-                SELECT
-                    request_id,
-                    status,
-                    point_of_sale,
-                    voucher_number,
-                    issue_date,
-                    foreign_total_amount,
-                    exchange_rate,
-                    cae,
-                    cae_due_date,
-                    error_message
-                FROM bronze.export_invoice_emissions
-                WHERE environment = 'dev'
-                ORDER BY created_at DESC
-                LIMIT 20
-                """
-            )
-        ).mappings()
-        return [dict(row) for row in rows]
+        raise AfipSdkError("WSFEX no informó el resultado de autorización.")
+    cae = str(authorization.get("Cae") or "").strip()
+    if str(authorization.get("Resultado") or "").upper() != "A" or not cae:
+        detail = authorization.get("Motivos_Obs") or "ARCA rechazó la solicitud."
+        raise AfipSdkError(str(detail))
+    return cae, _cae_due_date(authorization.get("Fch_venc_Cae")), voucher_number

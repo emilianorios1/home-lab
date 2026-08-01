@@ -201,50 +201,6 @@ def create_schema(engine: Engine) -> None:
         )
         """,
         """
-        CREATE TABLE IF NOT EXISTS bronze.export_invoice_emissions (
-            request_id BIGINT PRIMARY KEY,
-            environment TEXT NOT NULL CHECK (environment = 'dev'),
-            tax_id BIGINT NOT NULL,
-            status TEXT NOT NULL CHECK (
-                status IN ('pending', 'authorized', 'rejected', 'unknown')
-            ),
-            point_of_sale INTEGER NOT NULL CHECK (point_of_sale > 0),
-            voucher_type SMALLINT NOT NULL CHECK (voucher_type = 19),
-            voucher_number BIGINT,
-            issue_date DATE NOT NULL,
-            payment_date DATE NOT NULL CHECK (payment_date >= issue_date),
-            client_name TEXT NOT NULL,
-            client_address TEXT NOT NULL,
-            foreign_tax_id TEXT NOT NULL,
-            destination_country_code INTEGER NOT NULL,
-            destination_country_tax_id BIGINT NOT NULL,
-            description TEXT NOT NULL,
-            unit_code INTEGER NOT NULL,
-            foreign_currency TEXT NOT NULL CHECK (foreign_currency = 'USD'),
-            foreign_total_amount NUMERIC(18, 2) NOT NULL
-                CHECK (foreign_total_amount > 0),
-            exchange_rate NUMERIC(18, 6) NOT NULL CHECK (exchange_rate > 0),
-            request_payload JSONB,
-            response_payload JSONB,
-            cae TEXT UNIQUE,
-            cae_due_date DATE,
-            error_code TEXT,
-            error_message TEXT,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-            updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-        )
-        """,
-        """
-        ALTER TABLE bronze.export_invoice_emissions
-        DROP CONSTRAINT IF EXISTS
-            export_invoice_emissions_environment_point_of_sale_voucher_type_voucher_number_key
-        """,
-        """
-        ALTER TABLE bronze.export_invoice_emissions
-        DROP CONSTRAINT IF EXISTS
-            export_invoice_emissions_environment_point_of_sale_voucher__key
-        """,
-        """
         CREATE TABLE IF NOT EXISTS bronze.recurring_export_invoice_profile (
             id SMALLINT PRIMARY KEY CHECK (id = 1),
             point_of_sale INTEGER NOT NULL CHECK (point_of_sale > 0),
@@ -268,14 +224,6 @@ def create_schema(engine: Engine) -> None:
         "CREATE INDEX IF NOT EXISTS gmail_attachments_sha256_idx ON bronze.gmail_attachments(sha256)",
         "CREATE INDEX IF NOT EXISTS document_parse_status_idx ON bronze.document_parse_results(status)",
         "CREATE INDEX IF NOT EXISTS manual_shared_expenses_month_idx ON bronze.manual_shared_expenses(summary_month)",
-        "CREATE INDEX IF NOT EXISTS export_invoice_emissions_status_idx ON bronze.export_invoice_emissions(status)",
-        """
-        CREATE UNIQUE INDEX IF NOT EXISTS export_invoice_emissions_active_voucher_idx
-        ON bronze.export_invoice_emissions (
-            environment, point_of_sale, voucher_type, voucher_number
-        )
-        WHERE status <> 'rejected'
-        """,
         """
         INSERT INTO bronze.import_batches
             (id, source_filename, source_sha256, imported_at, row_count)

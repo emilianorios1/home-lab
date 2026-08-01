@@ -11,11 +11,8 @@ from home_lab.arca.client import AfipSdkClient, AfipSdkError
 from home_lab.arca.emission import (
     ExportInvoiceDraft,
     RecurringExportInvoiceProfile,
-    create_emission,
-    emission_history,
     emit_export_invoice,
     recurring_invoice_profile,
-    retryable_emissions,
     save_recurring_invoice_profile,
 )
 from home_lab.config import afip_sdk_access_token, monotributo_annual_limit_ars
@@ -257,97 +254,16 @@ with st.expander("Nueva Factura E de prueba"):
             if not confirmed:
                 raise ValueError("Confirmá el envío al sandbox.")
             client = AfipSdkClient(access_token or "")
-            request_id = create_emission(engine, draft, client)
-            attempt = emit_export_invoice(engine, request_id, client)
+            cae, cae_due_date, voucher_number = emit_export_invoice(draft, client)
         except (ValueError, InvalidOperation) as error:
             st.error(str(error))
         except AfipSdkError as error:
             st.warning(
-                f"{error} Si el borrador llegó a guardarse, reintentá desde "
-                "la lista inferior: se conservarán el ID y el payload."
+                f"{error} Verificá el sandbox antes de intentar otra emisión."
             )
         else:
-            if attempt.status == "authorized":
-                st.success(
-                    f"CAE de prueba {attempt.cae} generado para "
-                    f"{attempt.point_of_sale:05d}-"
-                    f"{attempt.voucher_number:08d}."
-                )
-            elif attempt.status == "rejected":
-                st.error(
-                    attempt.error_message
-                    or "ARCA rechazó el comprobante de prueba."
-                )
-            else:
-                st.warning(
-                    attempt.error_message
-                    or "El resultado quedó indeterminado; reintentá la misma "
-                    "operación."
-                )
-
-retryable = retryable_emissions(engine)
-if retryable:
-    st.subheader("Operaciones pendientes o indeterminadas")
-    for attempt in retryable:
-        label = (
-            f"ID {attempt.request_id} · "
-            f"{attempt.point_of_sale:05d}-"
-            f"{(attempt.voucher_number or 0):08d} · {attempt.status}"
-        )
-        description_column, action_column = st.columns([4, 1])
-        description_column.write(label)
-        if action_column.button(
-            "Reintentar",
-            key=f"retry-export-invoice-{attempt.request_id}",
-            disabled=access_token is None,
-        ):
-            try:
-                result = emit_export_invoice(
-                    engine,
-                    attempt.request_id,
-                    AfipSdkClient(access_token or ""),
-                )
-            except AfipSdkError as error:
-                st.warning(str(error))
-            else:
-                if result.status == "authorized":
-                    st.success(f"CAE de prueba {result.cae} generado.")
-                else:
-                    st.warning(
-                        result.error_message
-                        or f"La operación quedó en estado {result.status}."
-                    )
-                st.rerun()
-
-history = emission_history(engine)
-if history:
-    st.subheader("Últimas pruebas")
-    st.dataframe(
-        history,
-        width="stretch",
-        hide_index=True,
-        column_config={
-            "request_id": "ID WSFEX",
-            "status": "Estado",
-            "point_of_sale": "Punto de venta",
-            "voucher_number": "Número",
-            "issue_date": st.column_config.DateColumn(
-                "Emisión",
-                format="DD/MM/YYYY",
-            ),
-            "foreign_total_amount": st.column_config.NumberColumn(
-                "Total USD",
-                format="USD %.2f",
-            ),
-            "exchange_rate": st.column_config.NumberColumn(
-                "Tipo de cambio",
-                format="$ %.6f",
-            ),
-            "cae": "CAE de prueba",
-            "cae_due_date": st.column_config.DateColumn(
-                "Vencimiento CAE",
-                format="DD/MM/YYYY",
-            ),
-            "error_message": "Detalle",
-        },
-    )
+            due = f" · vence {cae_due_date:%d/%m/%Y}" if cae_due_date else ""
+            st.success(
+                f"CAE de prueba {cae} generado para "
+                f"{int(point_of_sale):05d}-{voucher_number:08d}{due}."
+            )

@@ -56,7 +56,6 @@ pandas==2.3.3
 parsedatetime==2.6
 pathspec==1.0.4
 pillow==12.3.0
-plotly==6.9.0
 pluggy==1.6.0
 proto-plus==1.28.2
 protobuf==6.33.6

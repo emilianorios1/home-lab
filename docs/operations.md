@@ -11,14 +11,21 @@ credenciales ni volúmenes:
 ## Desarrollo
 
 ```bash
-cp .env.example .env
+test -f .env || cp .env.example .env
+python3 -m venv .venv
+.venv/bin/pip install --constraint requirements.lock -e '.[dev]'
 scripts/dev-up.sh
 ```
 
-`dev-up.sh` construye la imagen, espera PostgreSQL, aplica el esquema y `dbt build`,
-y finalmente espera los healthchecks de Streamlit y del runner de
-sincronizaciones. El código de `src/` se monta en ambos contenedores y Streamlit
-recarga los cambios.
+El modo predeterminado levanta PostgreSQL y ejecuta `home-lab init-db` y `dbt
+build` desde el virtualenv local. Para probar la interfaz y las operaciones:
+
+```bash
+scripts/dev-up.sh --full
+```
+
+Ese modo construye la imagen y espera los healthchecks de Streamlit y del runner.
+El código de `src/` se monta en ambos contenedores y Streamlit recarga los cambios.
 
 En un worktree enlazado, inicializá una sola vez su entorno aislado antes de usar
 los mismos comandos:
@@ -28,41 +35,32 @@ scripts/init-worktree.sh
 scripts/dev-up.sh
 ```
 
-La `.env` generada contiene credenciales y puertos exclusivos. Compose también
-separa el proyecto, la imagen, la red y el volumen PostgreSQL; `data/` y `.venv`
-pertenecen al propio worktree.
+La `.env` generada contiene credenciales y puertos exclusivos. Compose separa el
+proyecto, la imagen, la red y el volumen PostgreSQL; `data/` y `.venv` pertenecen
+al propio worktree. No se inicia el dashboard ni se copian datos productivos por
+defecto.
 
-En el primer `dev-up.sh`, PostgreSQL toma un backup consistente de producción y
-lo restaura en el volumen aislado antes de ejecutar las migraciones y `dbt
-build` de la rama. Producción debe estar instalada y PostgreSQL debe estar en
-ejecución. Si no se puede obtener el snapshot, el arranque falla en vez de
-continuar con una base vacía.
-
-Los arranques posteriores reutilizan la base del worktree y no vuelven a copiar
-producción. Para obtener una foto nueva, creá un worktree nuevo. La copia
-contiene datos privados de producción: debe permanecer en su volumen Docker
-aislado y no debe exportarse, registrarse en logs ni incorporarse al repositorio.
-El snapshot incluye PostgreSQL. Los PDF no se copian: el dashboard de desarrollo
-monta el almacenamiento documental de producción en modo sólo lectura.
+Cuando una prueba necesite datos representativos, usá
+`scripts/dev-up.sh --snapshot` como primer arranque. El backup queda dentro del
+volumen aislado y nunca debe exportarse, imprimirse ni incorporarse al
+repositorio. Los PDF no se copian: el dashboard los monta desde producción en
+modo sólo lectura. `scripts/dev-up.sh --snapshot --full` combina el snapshot con
+la interfaz completa.
 
 Comandos cotidianos:
 
 ```bash
-# Estado y logs
+# Interfaz completa, estado y logs
+scripts/dev-up.sh --full
 docker compose ps
 docker compose logs -f dashboard
 docker compose logs -f sync-runner
 
-# Ejecutar tests en el virtualenv local
-python3 -m venv .venv
-.venv/bin/pip install --constraint requirements.lock -e '.[dev]'
+# Tests
 .venv/bin/pytest
 
-# Ejecutar una herramienta contra la base de desarrollo
-docker compose run --rm tools transform
-
-# Detener desarrollo sin borrar la base
-docker compose stop
+# Detener el stack sin borrar la base
+docker compose --env-file .env down
 ```
 
 `docker compose down -v` elimina la base de desarrollo completa; no es un comando

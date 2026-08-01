@@ -91,10 +91,3 @@ que terminan con `dbt build`.
 El esquema legado `raw` se mantiene como camino de compatibilidad para
 instalaciones existentes. Su migración a Bronze es repetible y no elimina el
 origen.
-
-## Lecturas relacionadas
-
-- [Integraciones](integrations.md)
-- [Modelo de datos](data-model.md)
-- [Dashboard](dashboard.md)
-- [Operación de desarrollo y producción](operations.md)

@@ -285,7 +285,7 @@ def parse_pending_documents(
             extracted_text = extracted.text
             parsed = registry.parse(extracted.text)
             if parsed is not None:
-                extracted_data = parsed.data
+                extracted_data = parsed
                 status = "parsed"
             else:
                 status = "unsupported"
