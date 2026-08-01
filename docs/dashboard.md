@@ -28,7 +28,7 @@ El dashboard ofrece:
 - documentos y facturas;
 - vencimientos e importes;
 - descarga del PDF original;
-- estado y errores de parsing.
+- estado y errores de parsing;
 - sincronización manual de Gmail, Mercado Pago y TGI.
 - importación manual del extracto CSV de Mercado Pago.
 
@@ -74,12 +74,12 @@ como cobradas hasta que exista una conciliación de ingresos en una fase futura.
 
 Al final de la misma pantalla hay un laboratorio WSFEX fijado al ambiente de
 desarrollo de Afip SDK. Requiere `AFIP_SDK_ACCESS_TOKEN`, confirmación explícita
-en cada alta y los códigos oficiales de país y unidad. Guarda la solicitud antes
-de enviarla y ofrece reintento cuando el resultado es indeterminado.
+en cada alta y los códigos oficiales de país y unidad. Cada envío es directo: no
+guarda payloads, historial ni reintentos. Si la respuesta queda indeterminada,
+primero verificá el sandbox antes de intentar otra emisión.
 
-Los CAE de ese laboratorio son de prueba: aparecen en su propia tabla, no se
-mezclan con los PDF emitidos realmente, no alteran los totales y no generan un
-PDF fiscal válido.
+Los CAE son de prueba: se muestran al responder WSFEX, no se mezclan con los PDF
+emitidos realmente, no alteran los totales y no generan un PDF fiscal válido.
 
 Si la factura de salario repite cliente, servicio e importe, el botón
 **Guardar perfil recurrente** conserva esos datos localmente. Cada mes el
@@ -151,9 +151,3 @@ Después de cambios en el dashboard o sus consultas:
 
 Cuando cambia el comportamiento visual, también hay que recorrer la página
 localmente.
-
-## Lecturas relacionadas
-
-- [Arquitectura](architecture.md)
-- [Integraciones](integrations.md)
-- [Modelo de datos](data-model.md)

@@ -51,16 +51,10 @@ Para importar un período y reconstruir Silver/Gold:
 .venv/bin/home-lab sync-mercadopago --from 2026-07-01 --to 2026-07-26
 ```
 
-Sin fechas importa el día anterior, que es el modo recomendado para cron:
+Sin fechas importa el día anterior:
 
 ```bash
-scripts/sync-mercadopago.sh
-```
-
-Ejemplo diario a las 06:30:
-
-```cron
-30 6 * * * /home/emiliano/home-lab/scripts/sync-mercadopago.sh >> /home/emiliano/home-lab/data/mercadopago-sync.log 2>&1
+.venv/bin/home-lab sync-mercadopago
 ```
 
 Repetir exactamente el mismo período reemplaza su lote anterior. Los lotes API
@@ -152,18 +146,6 @@ Para ejecutar el flujo completo:
 El comando descarga adjuntos nuevos, procesa documentos pendientes y ejecuta
 `dbt build`. Es idempotente: repetirlo no duplica correos ni PDF.
 
-El script para automatización usa `flock` e impide ejecuciones superpuestas:
-
-```bash
-scripts/sync-gmail.sh
-```
-
-Ejemplo de cron diario a las 07:15:
-
-```cron
-15 7 * * * /home/emiliano/home-lab/scripts/sync-gmail.sh >> /home/emiliano/home-lab/data/gmail-sync.log 2>&1
-```
-
 ## Fuentes documentales
 
 ### Expensas Zeta
@@ -240,9 +222,8 @@ una Factura E no registra un cobro.
 La pantalla **Facturación E** también incluye un laboratorio de emisión mediante
 Afip SDK. En esta etapa está fijado al ambiente `dev`, al CUIT compartido de
 desarrollo y al servicio WSFEX: solicita un CAE de prueba, no un comprobante
-fiscal válido. Los intentos se guardan en
-`bronze.export_invoice_emissions`, separados de los PDF reales y de los totales
-mensuales o de monotributo.
+fiscal válido. La solicitud es directa y no se mezcla con los PDF reales ni con
+los totales mensuales o de monotributo.
 
 Creá un token nuevo en Afip SDK y guardalo sólo en el `.env` del entorno:
 
@@ -251,10 +232,9 @@ AFIP_SDK_ACCESS_TOKEN=token-nuevo-no-versionado
 ```
 
 Si un token fue compartido por chat, correo o logs, revocalo antes de continuar.
-No se guarda el token ni el ticket de acceso de ARCA en PostgreSQL. La base
-conserva el borrador, el ID WSFEX, el número y el payload exacto antes de pedir
-el CAE. Si la respuesta queda indeterminada por un corte de red, el dashboard
-permite reenviar esa misma operación.
+No se guarda el token, el ticket, la solicitud ni la respuesta en PostgreSQL. Si
+la respuesta queda indeterminada por un corte de red, verificá el sandbox antes
+de intentar otra emisión.
 
 Para una factura de salario que repite cliente, descripción e importe, el mismo
 formulario permite guardar un único perfil recurrente en Bronze. No automatiza
@@ -304,25 +284,6 @@ Para descargar boletas nuevas, procesarlas y reconstruir Silver/Gold:
 .venv/bin/home-lab sync-siat-tgi
 ```
 
-El script de automatización usa `flock`:
-
-```bash
-scripts/sync-siat-tgi.sh
-```
-
-Ejemplo semanal, los lunes a las 07:30:
-
-```cron
-30 7 * * 1 /home/emiliano/home-lab/scripts/sync-siat-tgi.sh >> /home/emiliano/home-lab/data/siat-tgi-sync.log 2>&1
-```
-
 El parser `rosario_tgi_bill` extrae cuenta, inmueble, período, emisión,
 vencimiento e importe. La cuenta y el código son secretos locales y nunca se
 escriben en logs ni en metadatos de ingesta.
-
-## Lecturas relacionadas
-
-- [Arquitectura](architecture.md)
-- [Modelo de datos](data-model.md)
-- [Dashboard](dashboard.md)
-- [Operación de desarrollo y producción](operations.md)
