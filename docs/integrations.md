@@ -82,6 +82,10 @@ no como otro lote API:
 .venv/bin/home-lab transform
 ```
 
+También se puede cargar desde **Operaciones > Importar extracto de Mercado
+Pago** en el dashboard. La pantalla ejecuta ambos pasos y requiere la clave de
+operaciones.
+
 El CSV original se conserva por contenido en
 `data/bronze/financial-statements/mercadopago/<año>/<mes>/`. Su metadata, período,
 saldos y hash quedan en `bronze.financial_statements`, y sus movimientos en

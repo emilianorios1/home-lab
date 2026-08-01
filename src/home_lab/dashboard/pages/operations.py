@@ -6,6 +6,7 @@ import hmac
 import json
 import os
 from urllib.error import HTTPError, URLError
+from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 import streamlit as st
@@ -25,10 +26,32 @@ def trigger_sync(source: str) -> str:
     return str(payload["message"])
 
 
+def import_mercadopago_statement(filename: str, content: bytes) -> str:
+    request = Request(
+        f"{SYNC_RUNNER_URL}/import/mercadopago-statement",
+        data=content,
+        headers={
+            "Content-Type": "text/csv",
+            "X-Filename": quote(filename, safe=""),
+        },
+        method="POST",
+    )
+    with urlopen(request, timeout=900) as response:
+        payload = json.load(response)
+    return str(payload["message"])
+
+
+def runner_error(error: HTTPError, fallback: str) -> str:
+    try:
+        return str(json.load(error)["message"])
+    except (KeyError, TypeError, ValueError):
+        return fallback
+
+
 st.title("Operaciones")
 st.caption(
     "Sincronizá las fuentes externas y reconstruí Silver/Gold. "
-    "Sólo puede ejecutarse una sincronización por vez."
+    "Sólo puede ejecutarse una operación por vez."
 )
 
 if not OPERATIONS_PASSWORD:
@@ -83,6 +106,48 @@ for column, (source, label, help_text) in zip(st.columns(3), operations):
             st.error(
                 "No se pudo confirmar el resultado. La sincronización puede "
                 "seguir ejecutándose en el runner."
+            )
+        else:
+            st.success(message)
+
+st.divider()
+st.subheader("Importar extracto de Mercado Pago")
+st.caption(
+    "Subí el CSV de Resumen de cuenta. Se validan los saldos, se conserva el "
+    "original y se actualizan Silver/Gold."
+)
+uploaded_statement = st.file_uploader(
+    "Extracto CSV",
+    type="csv",
+    accept_multiple_files=False,
+)
+import_requested = st.button(
+    "Importar extracto",
+    type="primary",
+    disabled=uploaded_statement is None,
+)
+
+if import_requested and uploaded_statement is not None:
+    with st.spinner("Importando extracto y actualizando datos…"):
+        try:
+            message = import_mercadopago_statement(
+                uploaded_statement.name,
+                uploaded_statement.getvalue(),
+            )
+        except HTTPError as error:
+            if error.code == 409:
+                st.warning(runner_error(error, "Ya hay una operación en ejecución."))
+            else:
+                st.error(
+                    runner_error(
+                        error,
+                        "La importación falló. Revisá los logs del runner.",
+                    )
+                )
+        except (URLError, TimeoutError):
+            st.error(
+                "No se pudo confirmar el resultado. La importación puede seguir "
+                "ejecutándose en el runner."
             )
         else:
             st.success(message)

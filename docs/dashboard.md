@@ -30,6 +30,7 @@ El dashboard ofrece:
 - descarga del PDF original;
 - estado y errores de parsing.
 - sincronización manual de Gmail, Mercado Pago y TGI.
+- importación manual del extracto CSV de Mercado Pago.
 
 El almacenamiento documental se monta como sólo lectura dentro del contenedor.
 
@@ -38,6 +39,11 @@ El almacenamiento documental se monta como sólo lectura dentro del contenedor.
 La pantalla **Operaciones** permite ejecutar `sync-gmail`, `sync-mercadopago` y
 `sync-siat-tgi`. Cada comando importa su fuente y reconstruye Silver/Gold. Sólo
 puede ejecutarse uno por vez para evitar dos `dbt build` simultáneos.
+
+En la misma pantalla se puede subir el CSV de **Resumen de cuenta** descargado
+desde Mercado Pago. La importación valida saldos, conserva el archivo original y
+reconstruye Silver/Gold. Repetir un extracto del mismo período actualiza ese
+período sin duplicarlo.
 
 La pantalla requiere `HOME_LAB_OPERATIONS_PASSWORD`. La clave desbloquea las
 acciones durante la sesión actual del navegador; no se guarda en PostgreSQL. El

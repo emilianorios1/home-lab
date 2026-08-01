@@ -40,7 +40,7 @@ La explicación completa está en
 ## Funcionalidades
 
 - Importación de movimientos mediante la API de reportes de Mercado Pago.
-- Importación y validación de resúmenes de cuenta de Mercado Pago.
+- Importación y validación de resúmenes de cuenta de Mercado Pago desde el dashboard.
 - Lectura de Gmail y descarga segura de documentos financieros.
 - Facturas de EPE, ASSA y Litoral Gas, avisos de IPLAN, expensas Zeta y
   resúmenes de Naranja X.
@@ -134,7 +134,8 @@ la red local, usá `http://<ip-local-de-la-pc>:8501`.
 
 La aplicación permite revisar movimientos, obligaciones, conciliaciones,
 documentos, vencimientos, Facturas E y gastos compartidos, además de cargar el
-alquiler bruto mensual y ejecutar sincronizaciones desde **Operaciones**. El
+alquiler bruto mensual, importar extractos CSV de Mercado Pago y ejecutar
+sincronizaciones desde **Operaciones**. El
 laboratorio de Factura E está fijado a desarrollo y sus CAE de prueba no se
 mezclan con los totales reales. El almacenamiento documental se monta como sólo
 lectura dentro del dashboard; un runner interno separado conserva las
