@@ -1,35 +1,37 @@
-"""Dashboard entrypoint and shared date filter."""
+"""Dashboard entrypoint and shared monthly filter."""
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date
 
 import streamlit as st
 
-from home_lab.dashboard.queries import available_date_range
+from home_lab.dashboard.periods import month_bounds, month_label, months_between
+from home_lab.dashboard.queries import available_date_range, shared_expense_months
 from home_lab.database import get_engine
 
 
 st.set_page_config(page_title="House Ledger", page_icon="💸", layout="wide")
 engine = get_engine()
 date_range = available_date_range(engine)
-
-if date_range is None:
-    today = date.today()
-    date_range = (today - timedelta(days=30), today)
+current_month = date.today().replace(day=1)
+available_dates = [current_month, *shared_expense_months(engine)]
+if date_range is not None:
+    available_dates.extend(date_range)
+months = months_between(min(available_dates), max(available_dates))
 
 with st.sidebar:
     st.header("Filtros")
-    selected_dates = st.date_input(
-        "Período",
-        value=date_range,
-        min_value=date_range[0],
-        max_value=date_range[1],
+    selected_month = st.selectbox(
+        "Mes",
+        months,
+        index=months.index(current_month),
+        format_func=month_label,
+        key="selected_month",
     )
-    if len(selected_dates) != 2:
-        st.warning("Elegí una fecha de inicio y una de fin.")
-        st.stop()
-    st.session_state["start_date"], st.session_state["end_date"] = selected_dates
+    st.session_state["start_date"], st.session_state["end_date"] = month_bounds(
+        selected_month
+    )
 
 navigation = st.navigation(
     [

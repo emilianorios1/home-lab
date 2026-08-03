@@ -47,9 +47,9 @@ st.caption(
 )
 
 month_ars, month_usd, rolling, count = st.columns(4)
-month_ars.metric("Facturado este mes", money(summary["current_month_ars"]))
+month_ars.metric("Facturado en el mes", money(summary["current_month_ars"]))
 month_usd.metric(
-    "Facturado este mes en USD",
+    "Facturado en el mes en USD",
     money(summary["current_month_usd"], "USD"),
 )
 rolling.metric("Últimos 12 meses", money(summary["rolling_12_month_ars"]))

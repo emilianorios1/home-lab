@@ -2,45 +2,21 @@
 
 from __future__ import annotations
 
-from datetime import date
 from decimal import Decimal
 
 import pandas as pd
 import streamlit as st
 
 from home_lab.config import document_store_path
-from home_lab.dashboard.queries import (
-    monthly_shared_expenses,
-    shared_expense_months,
-)
+from home_lab.dashboard.periods import month_label
+from home_lab.dashboard.queries import monthly_shared_expenses
 from home_lab.dashboard.rents import save_monthly_rent
 from home_lab.database import get_engine
 from home_lab.documents.storage import resolve_document_path
 
 
-MONTH_NAMES = (
-    "",
-    "Enero",
-    "Febrero",
-    "Marzo",
-    "Abril",
-    "Mayo",
-    "Junio",
-    "Julio",
-    "Agosto",
-    "Septiembre",
-    "Octubre",
-    "Noviembre",
-    "Diciembre",
-)
-
-
 def ars(value: object) -> str:
     return f"$ {float(value):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-
-
-def month_label(value: date) -> str:
-    return f"{MONTH_NAMES[value.month]} {value.year}"
 
 
 def date_label(value: object) -> str:
@@ -97,20 +73,11 @@ SERVICE_ORDER = {
 
 
 engine = get_engine()
-months = shared_expense_months(engine)
-current_month = date.today().replace(day=1)
-months = sorted({*months, current_month})
+selected_month = st.session_state["selected_month"]
 
 st.title("Gastos compartidos")
 st.caption("Resumen del hogar y monto mensual a dividir con Vitoria.")
 
-default_month = max((month for month in months if month <= current_month), default=months[-1])
-selected_month = st.selectbox(
-    "Mes",
-    months,
-    index=months.index(default_month),
-    format_func=month_label,
-)
 summary = monthly_shared_expenses(engine, selected_month)
 services = summary["services"].copy()
 rent = summary["rent"]
