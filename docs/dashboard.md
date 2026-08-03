@@ -18,6 +18,8 @@ la misma red local, usá `http://<ip-local-de-la-pc>:8501`.
 
 El dashboard ofrece:
 
+- un selector mensual global, ubicado en la barra lateral y aplicado a todas
+  las páginas de reporte;
 - resumen mensual de gastos compartidos;
 - carga o corrección del alquiler bruto mensual;
 - cálculo del alquiler neto descontando expensas extraordinarias;
@@ -128,7 +130,8 @@ participan del mismo resumen sin guardar importes personales en el repositorio.
 
 En la pantalla **Gastos compartidos** se puede:
 
-- elegir el mes y ver el total, la parte de cada persona y el progreso de pago;
+- ver para el mes elegido en el filtro global el total, la parte de cada persona
+  y el progreso de pago;
 - cargar o corregir el alquiler bruto informado por la inmobiliaria;
 - revisar el cálculo separado del alquiler;
 - identificar rápidamente servicios pendientes y sus vencimientos;
