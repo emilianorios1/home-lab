@@ -7,6 +7,25 @@ normalizarlos en PostgreSQL con dbt y consultarlos desde Streamlit. Usa Python
 El paquete Python y el comando `home-lab` conservan su nombre original por
 compatibilidad.
 
+## Arquitectura
+
+```text
+Mercado Pago Reports API ───────┐
+                               ▼
+Gmail API ──► PDF/metadata ──► Bronze ──► parser PDF ──► Silver ──► Gold
+SIAT TGI ───► boleta PDF ────────┘
+                                                          │          │
+                                                          └────┬─────┘
+                                                               ▼
+                         Streamlit (consultas + mantenimiento explícito)
+                                         │
+                                         ▼
+                              sync runner HTTP interno
+```
+
+La explicación completa está en
+[`docs/architecture.md`](docs/architecture.md).
+
 ## Funcionalidades
 
 - Importación de movimientos de Mercado Pago y carga validada de sus resúmenes.
