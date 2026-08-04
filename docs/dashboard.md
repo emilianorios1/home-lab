@@ -27,7 +27,7 @@ El dashboard ofrece:
 - resumen y movimientos financieros;
 - Facturas E del mes y acumulado móvil de 12 meses;
 - laboratorio de emisión Factura E en el sandbox de Afip SDK;
-- documentos y facturas;
+- documentos y facturas con selección y vista previa del PDF;
 - vencimientos e importes;
 - descarga del PDF original;
 - estado y errores de parsing;
@@ -140,8 +140,9 @@ En la pantalla **Gastos compartidos** se puede:
 - desplegar el detalle de facturas y conciliaciones.
 
 Los PDF originales se conservan en el almacenamiento documental. Se pueden
-buscar, filtrar por tipo, emisor o estado de procesamiento y descargar desde
-**Documentos y facturas**.
+buscar y filtrar por tipo desde **Documentos y facturas**. Al seleccionar una
+fila, la pantalla muestra el PDF dentro del dashboard y conserva la descarga
+del archivo original.
 
 ## Validación
 

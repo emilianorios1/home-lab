@@ -16,7 +16,8 @@ dependencies = [
   "pypdf>=5.1,<7",
   "python-dotenv>=1.0,<2",
   "SQLAlchemy>=2.0,<3",
-  "streamlit>=1.40,<2",
+  "streamlit>=1.60,<2",
+  "streamlit-pdf>=1.0.8,<2",
 ]
 
 [project.scripts]
