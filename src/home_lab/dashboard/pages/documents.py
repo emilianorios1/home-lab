@@ -20,12 +20,6 @@ DOCUMENT_TYPE_LABELS = {
     "property_tax_bill": "TGI",
     "water_bill": "Agua",
 }
-PARSE_STATUS_LABELS = {
-    "failed": "Con error",
-    "parsed": "Parseado",
-    "pending": "Pendiente",
-    "unsupported": "No soportado",
-}
 
 
 def ars(value: object) -> str:
@@ -45,20 +39,11 @@ search = st.text_input(
 )
 options = document_filter_options(engine, start_date, end_date)
 document_type_options = sorted(options["document_type"].dropna().unique())
-issuer_options = sorted(options["issuer"].dropna().unique())
-parse_status_options = sorted(options["parse_status"].dropna().unique())
 
-type_column, issuer_column, status_column = st.columns(3)
-document_types = type_column.multiselect(
+document_types = st.multiselect(
     "Tipo",
     document_type_options,
     format_func=lambda value: DOCUMENT_TYPE_LABELS.get(value, value),
-)
-issuers = issuer_column.multiselect("Emisor", issuer_options)
-parse_statuses = status_column.multiselect(
-    "Estado",
-    parse_status_options,
-    format_func=lambda value: PARSE_STATUS_LABELS.get(value, value),
 )
 data = documents(
     engine,
@@ -66,8 +51,6 @@ data = documents(
     end_date,
     search,
     document_types=tuple(document_types),
-    issuers=tuple(issuers),
-    parse_statuses=tuple(parse_statuses),
 )
 
 parsed_count = int((data["parse_status"] == "parsed").sum()) if not data.empty else 0
@@ -94,22 +77,18 @@ visible_columns = [
     "parse_status",
     "original_filename",
 ]
-st.dataframe(data[visible_columns], width="stretch", hide_index=True)
-
-labels = {
-    int(row.document_id): (
-        f"{row.document_date:%d/%m/%Y} · "
-        f"{row.issuer if pd.notna(row.issuer) else 'Sin emisor'} · {row.original_filename}"
-    )
-    for row in data.itertuples()
-}
-selected_id = st.selectbox(
-    "Abrir documento",
-    options=list(labels),
-    format_func=labels.get,
+selection = st.dataframe(
+    data[visible_columns],
+    width="stretch",
+    hide_index=True,
+    key="documents",
+    on_select="rerun",
+    selection_mode="single-row-required",
 )
-selected = data.loc[data["document_id"] == selected_id].iloc[0]
+selected = data.iloc[selection.selection.rows[0]]
 
+st.subheader("Documento seleccionado")
+st.caption(str(selected["original_filename"]))
 left, right = st.columns(2)
 left.metric("Primer vencimiento", ars(selected["first_due_amount"]))
 right.metric("Segundo vencimiento", ars(selected["second_due_amount"]))
@@ -118,11 +97,17 @@ if pd.notna(selected["error_message"]) and selected["error_message"]:
 
 try:
     path = resolve_document_path(document_store_path(), str(selected["storage_path"]))
+    pdf = path.read_bytes()
     st.download_button(
         "Descargar PDF",
-        data=path.read_bytes(),
+        data=pdf,
         file_name=str(selected["original_filename"]),
         mime="application/pdf",
+    )
+    st.pdf(
+        pdf,
+        height=700,
+        key=f"document-preview-{selected['document_id']}",
     )
 except (OSError, ValueError) as error:
     st.warning(f"El archivo no está disponible en el almacenamiento local: {error}")
