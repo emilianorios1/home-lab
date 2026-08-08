@@ -24,7 +24,7 @@ dependencies = [
 home-lab = "home_lab.cli:main"
 
 [project.optional-dependencies]
-dev = ["pytest>=8,<9"]
+dev = ["pytest>=8,<10"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
